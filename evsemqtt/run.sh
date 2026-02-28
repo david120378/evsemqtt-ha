@@ -39,7 +39,7 @@ echo "Starting evseMQTT ..."
 set -ex
 
 if [ "${WIFI_ENABLED}" = "true" ]; then
-    /usr/local/bin/evseMQTT \
+    evseMQTT \
         --password "${BLE_PASSWORD}" \
         --unit "${UNIT}" \
         --mqtt \
@@ -50,7 +50,7 @@ if [ "${WIFI_ENABLED}" = "true" ]; then
         --logging_level "${LOGGING_LEVEL}" \
         ${EXTRA_ARGS}
 else
-    /usr/local/bin/evseMQTT \
+    evseMQTT \
         --address "${BLE_ADDRESS}" \
         --password "${BLE_PASSWORD}" \
         --unit "${UNIT}" \
