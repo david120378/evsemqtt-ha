@@ -1,10 +1,11 @@
-FROM python:3-alpine
+ARG BUILD_FROM
+FROM $BUILD_FROM
 
-RUN apk add --no-cache bluez jq
+RUN apk add --no-cache bluez jq git python3 py3-pip
 
-RUN pip install git+https://github.com/slespersen/evseMQTT@main
+RUN pip3 install --break-system-packages git+https://github.com/slespersen/evseMQTT@main
 
 COPY run.sh /run.sh
-RUN chmod +x /run.sh
+RUN chmod a+x /run.sh
 
 CMD ["/run.sh"]
