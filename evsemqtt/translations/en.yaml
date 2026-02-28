@@ -1,0 +1,40 @@
+configuration:
+  BLE_ADDRESS:
+    name: BLE Address
+    description: MAC address of your Besen BS20 Wallbox (e.g. AA:BB:CC:DD:EE:FF). Required when using BLE mode.
+  BLE_PASSWORD:
+    name: BLE / WiFi Password
+    description: 6-digit PIN of your Wallbox (default is 123456).
+  WIFI_ENABLED:
+    name: WiFi Mode
+    description: Connect to the Wallbox via WiFi (TCP) instead of Bluetooth.
+  WIFI_ADDRESS:
+    name: WiFi Address
+    description: IP address of the Wallbox on your local network. Required when WiFi mode is enabled.
+  WIFI_PORT:
+    name: WiFi Port
+    description: TCP port the Wallbox listens on (default is 6722).
+  UNIT:
+    name: Power Unit
+    description: Unit of measurement for consumed power (W or kW).
+  MQTT_BROKER:
+    name: MQTT Broker
+    description: Hostname or IP of your MQTT broker. Use 'core-mosquitto' for the Mosquitto broker addon.
+  MQTT_PORT:
+    name: MQTT Port
+    description: Port of your MQTT broker (default is 1883).
+  MQTT_USER:
+    name: MQTT Username
+    description: Username for authentication with your MQTT broker.
+  MQTT_PASSWORD:
+    name: MQTT Password
+    description: Password for authentication with your MQTT broker.
+  RSSI:
+    name: Monitor RSSI
+    description: Enable periodic Bluetooth signal strength monitoring (BLE mode only).
+  LOGGING_LEVEL:
+    name: Logging Level
+    description: Verbosity of log output. Use DEBUG for troubleshooting.
+  SYS_MODULE_TO_RELOAD:
+    name: Bluetooth Kernel Module
+    description: Kernel module to reload on startup to recover from crashes (e.g. btusb for USB dongles, hci_uart for Raspberry Pi). Leave empty to disable.
