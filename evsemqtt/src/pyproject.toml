@@ -16,6 +16,7 @@ evseMQTT = "main:main"
 
 [tool.setuptools]
 py-modules = ["main"]
+packages = ["evseMQTT"]
 
 [build-system]
 requires = ["setuptools"]
