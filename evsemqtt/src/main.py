@@ -7,7 +7,7 @@ from evseMQTT import BLEManager, Constants, Device, EventHandlers, Commands, Log
 
 class Manager:
     def __init__(self, address, ble_password, unit, mqtt_enabled=False, mqtt_settings=None, logging_level=logging.INFO, rssi=False,
-                 wifi_enabled=False, wifi_address=None, wifi_port=6722, wifi_server=False):
+                 wifi_enabled=False, wifi_port=7248):
         self.setup_logging(logging_level)
         self.logger = logging.getLogger("evseMQTT")
         debug = logging_level == logging.DEBUG  # Determine if debug logging is enabled
@@ -15,7 +15,7 @@ class Manager:
         self.wifi_enabled = wifi_enabled
         self.address = address
 
-        self.device = Device(wifi_address if wifi_enabled else address)
+        self.device = Device(address)
 
         # Set the energy consumption unit
         self.device.unit = unit
@@ -32,11 +32,9 @@ class Manager:
 
         if wifi_enabled:
             self.wifi_manager = WiFiManager(
-                host=wifi_address,
                 port=wifi_port,
                 event_handler=self.event_handlers,
                 logger=self.logger,
-                server_mode=wifi_server,
             )
             self.wifi_manager.manager = self
             self.commands.ble_manager = self.wifi_manager
@@ -67,58 +65,44 @@ class Manager:
 
     async def _run_wifi(self):
         consumer = asyncio.create_task(self.wifi_manager.message_consumer())
+        asyncio.create_task(self.wifi_manager.serve())
 
-        if self.wifi_manager.server_mode:
-            self.logger.info(f"WiFi server mode: listening on port {self.wifi_manager.port} ...")
-            server_task = asyncio.create_task(self.wifi_manager.serve())
-            connected = True  # serve() handles connections internally
-        else:
-            self.logger.info(f"Connecting via WiFi to {self.wifi_manager.host}:{self.wifi_manager.port} ...")
-            connected = await self.wifi_manager.connect()
-            if connected:
-                self.logger.info("WiFi connected.")
-                asyncio.create_task(self.wifi_manager.read_loop())
+        try:
+            self.logger.info("Waiting for wallbox UDP broadcast ...")
 
-        if connected:
+            while not self.device.initialization_state:
+                self.logger.info("Device not initialized yet, waiting...")
+                await asyncio.sleep(1)
 
-            try:
-                self.logger.info("Waiting for device initialization...")
+            self.logger.info(f"Device initialized with serial: {self.device.info['serial']}. Proceeding with login request.")
 
-                while not self.device.initialization_state:
-                    self.logger.info("Device not initialized yet, waiting...")
-                    await asyncio.sleep(1)
+            if self.device.fallback:
+                self.logger.info("Fallback: software_version populated with hardware_version.")
+                self.device.info = {'software_version': self.device.info['hardware_version']}
 
-                self.logger.info(f"Device initialized with serial: {self.device.info['serial']}. Proceeding with login request.")
+            while self.device.info['software_version'] is None:
+                self.logger.info("Waiting for software version...")
+                await asyncio.sleep(1)
 
-                if self.device.fallback:
-                    self.logger.info("Fallback: software_version populated with hardware_version.")
-                    self.device.info = {'software_version': self.device.info['hardware_version']}
+            if self.mqtt_client and not self.mqtt_client.connected and self.device.info['serial'] is not None and self.device.info['software_version'] is not None:
+                self.mqtt_payloads = MQTTPayloads(device=self.device)
+                self.mqtt_callback = MQTTCallback(device=self.device, commands=self.commands)
+                discovery_payloads = self.mqtt_payloads.discovery()
+                self.mqtt_client.publish_discovery(discovery_payloads)
+                self.mqtt_client.subscribe(f"evseMQTT/{self.device.info['serial']}/command")
+                self.mqtt_client.set_on_message(self.mqtt_callback.delegate)
+                self.mqtt_client.publish_availability(self.device.info['serial'], "online")
 
-                while self.device.info['software_version'] is None:
-                    self.logger.info("Waiting for software version...")
-                    await asyncio.sleep(1)
+            while True:
+                await asyncio.sleep(1)
+                self.logger.debug("Idling...")
 
-                if self.mqtt_client and not self.mqtt_client.connected and self.device.info['serial'] is not None and self.device.info['software_version'] is not None:
-                    self.mqtt_payloads = MQTTPayloads(device=self.device)
-                    self.mqtt_callback = MQTTCallback(device=self.device, commands=self.commands)
-                    discovery_payloads = self.mqtt_payloads.discovery()
-                    self.mqtt_client.publish_discovery(discovery_payloads)
-                    self.mqtt_client.subscribe(f"evseMQTT/{self.device.info['serial']}/command")
-                    self.mqtt_client.set_on_message(self.mqtt_callback.delegate)
-                    self.mqtt_client.publish_availability(self.device.info['serial'], "online")
-
-                while True:
-                    await asyncio.sleep(1)
-                    self.logger.debug("Idling...")
-
-            except (KeyboardInterrupt, SystemExit):
-                self.logger.info("Interrupted, cleaning up...")
-                await self.wifi_manager.queue.join()
-                await self.wifi_manager.disconnect()
-            finally:
-                reader_task.cancel()
-                consumer.cancel()
-                self.cleanup()
+        except (KeyboardInterrupt, SystemExit):
+            self.logger.info("Interrupted, cleaning up...")
+            await self.wifi_manager.disconnect()
+        finally:
+            consumer.cancel()
+            self.cleanup()
 
     async def _run_ble(self, address):
         await self.ble_manager.scan()
@@ -221,14 +205,9 @@ def main():
     parser.add_argument("--mqtt_password", type=str, help="MQTT password")
     parser.add_argument("--rssi", action='store_true', help="Monitor Received Signal Strength Indicator (BLE only)")
     parser.add_argument("--logging_level", type=str, default="INFO", help="Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)")
-    parser.add_argument("--wifi", action='store_true', help="Connect via WiFi (TCP) instead of BLE")
-    parser.add_argument("--wifi_address", type=str, default="", help="IP address of the Wallbox (WiFi client mode)")
-    parser.add_argument("--wifi_port", type=int, default=6722, help="TCP port (client: wallbox port, server: port to listen on, default 6722)")
-    parser.add_argument("--wifi_server", action='store_true', help="Run as TCP server — wait for the wallbox to connect to us")
+    parser.add_argument("--wifi", action='store_true', help="Connect via WiFi (UDP) instead of BLE")
+    parser.add_argument("--wifi_port", type=int, default=7248, help="UDP port to listen on for wallbox broadcasts (default 7248)")
     args = parser.parse_args()
-
-    if args.wifi and not args.wifi_server and not args.wifi_address:
-        parser.error("--wifi_address is required in WiFi client mode (or use --wifi_server)")
 
     if not args.wifi and not args.address:
         parser.error("--address is required when using BLE mode")
@@ -251,9 +230,7 @@ def main():
         rssi=args.rssi,
         logging_level=logging_level,
         wifi_enabled=args.wifi,
-        wifi_address=args.wifi_address,
         wifi_port=args.wifi_port,
-        wifi_server=args.wifi_server,
     )
 
     # Register signal handlers for common termination signals

@@ -1,174 +1,125 @@
 import asyncio
+import socket
+
+
+class _UDPProtocol(asyncio.DatagramProtocol):
+    """Low-level asyncio UDP callback handler — bridges datagrams into WiFiManager."""
+
+    def __init__(self, manager):
+        self._mgr = manager
+
+    def connection_made(self, transport):
+        self._mgr.transport = transport
+        sock = transport.get_extra_info("socket")
+        try:
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+        except Exception as e:
+            self._mgr.logger.warning(f"Could not enable UDP broadcast: {e}")
+        self._mgr.logger.info(f"UDP socket bound on port {self._mgr.port}")
+
+    def datagram_received(self, data, addr):
+        asyncio.ensure_future(self._mgr._on_datagram(data, addr))
+
+    def error_received(self, exc):
+        self._mgr.logger.error(f"UDP error: {exc}")
+
+    def connection_lost(self, exc):
+        self._mgr.logger.warning("UDP socket closed")
+        self._mgr.connected = False
 
 
 class WiFiManager:
-    """TCP-based connection manager for EVSE wallboxes reachable over WiFi.
+    """UDP-based connection manager for EVSE wallboxes reachable over WiFi.
 
-    Supports two modes:
-    - Client mode (server_mode=False): connects to the wallbox directly.
-    - Server mode (server_mode=True): listens for an incoming connection from
-      the wallbox. Use this when the wallbox connects outbound to a cloud server
-      and you want to intercept that connection locally.
+    The wallbox sends UDP broadcast datagrams to port 7248 (default).  We bind
+    a UDP socket on that port, receive the broadcasts, and reply unicast to the
+    wallbox's IP/port — which is auto-discovered from the first incoming packet.
+    No IP address configuration required.
 
-    Mirrors the interface of BLEManager so that the rest of the codebase
-    (Commands, EventHandlers, Manager) can use either transport transparently.
+    Mirrors the interface of BLEManager so that Commands, EventHandlers and
+    Manager can use either transport transparently.
     """
 
-    def __init__(self, host, port, event_handler, logger, server_mode=False):
-        self.host = host
+    def __init__(self, port, event_handler, logger):
         self.port = port
-        self.server_mode = server_mode
         self.event_handler = event_handler
         self.logger = logger
 
-        self.queue = asyncio.Queue(5)
-        self.reader = None
-        self.writer = None
+        self.transport = None          # asyncio.DatagramTransport, set by _UDPProtocol
+        self.evse_addr = None          # (ip, port) of wallbox, discovered on first packet
+        self.queue = asyncio.Queue(5)  # outbound message queue (same as BLEManager)
         self.connected = False
-        self._server = None  # asyncio.Server handle (server mode only)
 
         self.last_message_time = None
-        self.message_timeout = 35  # seconds — same as BLEManager
-        self.max_retries = 5
+        self.message_timeout = 35      # seconds — triggers restart_run if exceeded
 
         # Set by Manager after instantiation, same pattern as BLEManager
         self.manager = None
 
     # ------------------------------------------------------------------
-    # Connection management — client mode
-    # ------------------------------------------------------------------
-
-    async def connect(self):
-        """Connect to the wallbox (client mode)."""
-        for attempt in range(self.max_retries):
-            self.logger.info(
-                f"Connecting to {self.host}:{self.port}, attempt {attempt + 1}"
-            )
-            try:
-                self.reader, self.writer = await asyncio.wait_for(
-                    asyncio.open_connection(self.host, self.port), timeout=15.0
-                )
-                self._on_connected(f"{self.host}:{self.port}")
-                return True
-            except Exception as e:
-                self.logger.error(f"Attempt {attempt + 1} failed: {e}")
-                await asyncio.sleep(2)
-
-        if self.manager:
-            await self.manager.exit_with_error(
-                f"Failed to connect to {self.host}:{self.port} after {self.max_retries} attempts"
-            )
-        return False
-
-    # ------------------------------------------------------------------
-    # Connection management — server mode
+    # Startup / shutdown
     # ------------------------------------------------------------------
 
     async def serve(self):
-        """Start a TCP server and wait for the wallbox to connect (server mode)."""
+        """Bind the UDP socket and listen indefinitely for wallbox datagrams."""
+        loop = asyncio.get_event_loop()
+        await loop.create_datagram_endpoint(
+            lambda: _UDPProtocol(self),
+            local_addr=("0.0.0.0", self.port),
+        )
         self.logger.info(
-            f"WiFi server mode: listening on port {self.port} for wallbox connection ..."
+            f"WiFi (UDP) mode: listening on port {self.port} — "
+            "waiting for wallbox broadcast ..."
         )
-        self._server = await asyncio.start_server(
-            self._handle_client, "0.0.0.0", self.port
-        )
-        async with self._server:
-            await self._server.serve_forever()
-
-    async def _handle_client(self, reader, writer):
-        """Called by asyncio when the wallbox connects to our server."""
-        peer = writer.get_extra_info("peername")
-        self.logger.info(f"Wallbox connected from {peer}")
-        self.reader = reader
-        self.writer = writer
-        self._on_connected(str(peer))
-        await self.read_loop()
-
-    # ------------------------------------------------------------------
-    # Shared helpers
-    # ------------------------------------------------------------------
-
-    def _on_connected(self, label):
-        self.connected = True
-        self.last_message_time = asyncio.get_event_loop().time()
-        self.logger.info(f"WiFi connected: {label}")
-        self._schedule_reconnect_check()
+        # Keep coroutine alive; actual work happens in datagram_received callbacks.
+        while True:
+            await asyncio.sleep(3600)
 
     async def disconnect(self):
         self.connected = False
-        if self.writer:
-            try:
-                self.writer.close()
-                await self.writer.wait_closed()
-            except Exception:
-                pass
-            self.writer = None
-            self.reader = None
-        if self._server:
-            self._server.close()
-        self.logger.info("WiFi disconnected")
+        if self.transport:
+            self.transport.close()
+            self.transport = None
+        self.evse_addr = None
+        self.logger.info("WiFi (UDP) disconnected")
 
     # ------------------------------------------------------------------
-    # Read loop — equivalent to BLE notification callbacks
+    # Incoming datagrams
     # ------------------------------------------------------------------
 
-    async def read_loop(self):
-        """Continuously read data from the TCP socket and forward to EventHandlers."""
-        while True:
-            if not self.connected or self.reader is None:
-                if self.server_mode:
-                    # In server mode we wait for the next inbound connection
-                    self.logger.warning("WiFi server: waiting for wallbox to reconnect ...")
-                    await asyncio.sleep(5)
-                    continue
-                else:
-                    self.logger.warning("WiFi: not connected, attempting reconnect ...")
-                    await self.connect()
-                    await asyncio.sleep(1)
-                    continue
+    async def _on_datagram(self, data, addr):
+        self.last_message_time = asyncio.get_event_loop().time()
 
-            try:
-                data = await self.reader.read(4096)
-                if not data:
-                    self.logger.warning("WiFi: connection closed by device")
-                    self.connected = False
-                    continue
+        if not self.connected:
+            self.evse_addr = addr
+            self.connected = True
+            self.logger.info(f"Wallbox discovered at {addr[0]}:{addr[1]}")
+            self._schedule_reconnect_check()
 
-                self.last_message_time = asyncio.get_event_loop().time()
-                await self.event_handler.receive_notification(
-                    "wifi", bytearray(data)
-                )
-
-            except asyncio.CancelledError:
-                break
-            except Exception as e:
-                self.logger.error(f"WiFi read error: {e}")
-                self.connected = False
+        await self.event_handler.receive_notification("wifi", bytearray(data))
 
     # ------------------------------------------------------------------
-    # Write queue — equivalent to BLEManager.message_consumer / producer
+    # Outgoing datagrams  (write queue — same interface as BLEManager)
     # ------------------------------------------------------------------
+
+    async def message_producer(self, message):
+        await self.queue.put(message)
 
     async def message_consumer(self, *args, **kwargs):
-        """Drain the outbound queue and write each message to the TCP socket."""
+        """Drain the outbound queue and send each message to the wallbox."""
         while True:
-            if not self.connected or self.writer is None:
-                await asyncio.sleep(1)
+            if not self.transport or not self.evse_addr:
+                await asyncio.sleep(0.1)
                 continue
 
             message = await self.queue.get()
             try:
-                self.writer.write(message)
-                await self.writer.drain()
-                self.logger.debug(f"WiFi wrote {len(message)} bytes")
+                self.transport.sendto(message, self.evse_addr)
+                self.logger.debug(f"UDP sent {len(message)} bytes to {self.evse_addr}")
             except Exception as e:
-                self.logger.error(f"WiFi write error: {e}")
-                self.connected = False
+                self.logger.error(f"UDP send error: {e}")
             finally:
                 self.queue.task_done()
-
-    async def message_producer(self, message):
-        await self.queue.put(message)
 
     # ------------------------------------------------------------------
     # Reconnect watchdog — mirrors BLEManager behaviour
@@ -186,7 +137,7 @@ class WiFiManager:
             > self.message_timeout
         ):
             self.logger.warning(
-                f"No message received in the last {self.message_timeout} s. "
+                f"No UDP datagram received in the last {self.message_timeout} s. "
                 "Requesting manager restart."
             )
             asyncio.create_task(self.manager.restart_run())

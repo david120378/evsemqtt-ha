@@ -9,16 +9,11 @@ fi
 SYS_MODULE_TO_RELOAD=${SYS_MODULE_TO_RELOAD:-""}
 RSSI=${RSSI:-"false"}
 WIFI_ENABLED=${WIFI_ENABLED:-"false"}
-WIFI_SERVER=${WIFI_SERVER:-"false"}
-WIFI_PORT=${WIFI_PORT:-6722}
+WIFI_PORT=${WIFI_PORT:-7248}
 EXTRA_ARGS=""
 
 if [ "${WIFI_ENABLED}" = "true" ]; then
-    if [ "${WIFI_SERVER}" = "true" ]; then
-        EXTRA_ARGS="${EXTRA_ARGS} --wifi --wifi_server --wifi_port ${WIFI_PORT}"
-    else
-        EXTRA_ARGS="${EXTRA_ARGS} --wifi --wifi_address ${WIFI_ADDRESS} --wifi_port ${WIFI_PORT}"
-    fi
+    EXTRA_ARGS="${EXTRA_ARGS} --wifi --wifi_port ${WIFI_PORT}"
 else
     if [ "${RSSI}" = "true" ]; then
         EXTRA_ARGS="${EXTRA_ARGS} --rssi"
