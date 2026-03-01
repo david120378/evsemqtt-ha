@@ -1,6 +1,6 @@
 name: "evseMQTT"
 description: "Steuert die Besen BS20 Wallbox via BLE oder WiFi und stellt sie Home Assistant per MQTT Discovery zur Verfügung"
-version: "0.0.6"
+version: "0.0.7"
 slug: "evsemqtt"
 url: "https://github.com/slespersen/evseMQTT"
 init: false
@@ -14,7 +14,7 @@ arch:
 
 options:
   WIFI_ENABLED: false
-  WIFI_PORT: 7248
+  WIFI_PORT: 28376
   BLE_ADDRESS: ""
   BLE_PASSWORD: "123456"
   UNIT: "W"

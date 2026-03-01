@@ -7,7 +7,7 @@ from evseMQTT import BLEManager, Constants, Device, EventHandlers, Commands, Log
 
 class Manager:
     def __init__(self, address, ble_password, unit, mqtt_enabled=False, mqtt_settings=None, logging_level=logging.INFO, rssi=False,
-                 wifi_enabled=False, wifi_port=7248):
+                 wifi_enabled=False, wifi_port=28376):
         self.setup_logging(logging_level)
         self.logger = logging.getLogger("evseMQTT")
         debug = logging_level == logging.DEBUG  # Determine if debug logging is enabled
@@ -206,7 +206,7 @@ def main():
     parser.add_argument("--rssi", action='store_true', help="Monitor Received Signal Strength Indicator (BLE only)")
     parser.add_argument("--logging_level", type=str, default="INFO", help="Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)")
     parser.add_argument("--wifi", action='store_true', help="Connect via WiFi (UDP) instead of BLE")
-    parser.add_argument("--wifi_port", type=int, default=7248, help="UDP port to listen on for wallbox broadcasts (default 7248)")
+    parser.add_argument("--wifi_port", type=int, default=28376, help="UDP port to listen on for wallbox broadcasts (default 28376)")
     args = parser.parse_args()
 
     if not args.wifi and not args.address:

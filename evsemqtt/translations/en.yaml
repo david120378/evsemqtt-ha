@@ -10,7 +10,7 @@ configuration:
     description: Connect to the Wallbox via WiFi (UDP) instead of Bluetooth. The Wallbox is auto-discovered via UDP broadcast — no IP address needed.
   WIFI_PORT:
     name: WiFi UDP Port
-    description: UDP port to listen on for wallbox broadcasts (default is 7248). Change only if your wallbox uses a different port.
+    description: UDP port to listen on for wallbox broadcasts (default is 28376). Change only if your wallbox uses a different port.
   UNIT:
     name: Power Unit
     description: Unit of measurement for consumed power (W or kW).
