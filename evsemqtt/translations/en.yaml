@@ -8,12 +8,15 @@ configuration:
   WIFI_ENABLED:
     name: WiFi Mode
     description: Connect to the Wallbox via WiFi (TCP) instead of Bluetooth.
+  WIFI_SERVER:
+    name: WiFi Server Mode
+    description: Run as a TCP server and wait for the Wallbox to connect inbound. Use this when the Wallbox connects outbound to the cloud and you redirect its traffic to Home Assistant. When enabled, WIFI_ADDRESS is ignored.
   WIFI_ADDRESS:
     name: WiFi Address
-    description: IP address of the Wallbox on your local network. Required when WiFi mode is enabled.
+    description: IP address of the Wallbox on your local network. Required in WiFi client mode (WIFI_SERVER=false).
   WIFI_PORT:
     name: WiFi Port
-    description: TCP port the Wallbox listens on (default is 6722).
+    description: TCP port — in client mode this is the port the Wallbox listens on; in server mode this is the port Home Assistant will listen on (default is 6722).
   UNIT:
     name: Power Unit
     description: Unit of measurement for consumed power (W or kW).

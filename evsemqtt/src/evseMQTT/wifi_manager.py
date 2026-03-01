@@ -4,13 +4,20 @@ import asyncio
 class WiFiManager:
     """TCP-based connection manager for EVSE wallboxes reachable over WiFi.
 
+    Supports two modes:
+    - Client mode (server_mode=False): connects to the wallbox directly.
+    - Server mode (server_mode=True): listens for an incoming connection from
+      the wallbox. Use this when the wallbox connects outbound to a cloud server
+      and you want to intercept that connection locally.
+
     Mirrors the interface of BLEManager so that the rest of the codebase
     (Commands, EventHandlers, Manager) can use either transport transparently.
     """
 
-    def __init__(self, host, port, event_handler, logger):
+    def __init__(self, host, port, event_handler, logger, server_mode=False):
         self.host = host
         self.port = port
+        self.server_mode = server_mode
         self.event_handler = event_handler
         self.logger = logger
 
@@ -18,6 +25,7 @@ class WiFiManager:
         self.reader = None
         self.writer = None
         self.connected = False
+        self._server = None  # asyncio.Server handle (server mode only)
 
         self.last_message_time = None
         self.message_timeout = 35  # seconds — same as BLEManager
@@ -27,10 +35,11 @@ class WiFiManager:
         self.manager = None
 
     # ------------------------------------------------------------------
-    # Connection management
+    # Connection management — client mode
     # ------------------------------------------------------------------
 
     async def connect(self):
+        """Connect to the wallbox (client mode)."""
         for attempt in range(self.max_retries):
             self.logger.info(
                 f"Connecting to {self.host}:{self.port}, attempt {attempt + 1}"
@@ -39,10 +48,7 @@ class WiFiManager:
                 self.reader, self.writer = await asyncio.wait_for(
                     asyncio.open_connection(self.host, self.port), timeout=15.0
                 )
-                self.connected = True
-                self.last_message_time = asyncio.get_event_loop().time()
-                self.logger.info(f"Connected to {self.host}:{self.port}")
-                self._schedule_reconnect_check()
+                self._on_connected(f"{self.host}:{self.port}")
                 return True
             except Exception as e:
                 self.logger.error(f"Attempt {attempt + 1} failed: {e}")
@@ -54,6 +60,40 @@ class WiFiManager:
             )
         return False
 
+    # ------------------------------------------------------------------
+    # Connection management — server mode
+    # ------------------------------------------------------------------
+
+    async def serve(self):
+        """Start a TCP server and wait for the wallbox to connect (server mode)."""
+        self.logger.info(
+            f"WiFi server mode: listening on port {self.port} for wallbox connection ..."
+        )
+        self._server = await asyncio.start_server(
+            self._handle_client, "0.0.0.0", self.port
+        )
+        async with self._server:
+            await self._server.serve_forever()
+
+    async def _handle_client(self, reader, writer):
+        """Called by asyncio when the wallbox connects to our server."""
+        peer = writer.get_extra_info("peername")
+        self.logger.info(f"Wallbox connected from {peer}")
+        self.reader = reader
+        self.writer = writer
+        self._on_connected(str(peer))
+        await self.read_loop()
+
+    # ------------------------------------------------------------------
+    # Shared helpers
+    # ------------------------------------------------------------------
+
+    def _on_connected(self, label):
+        self.connected = True
+        self.last_message_time = asyncio.get_event_loop().time()
+        self.logger.info(f"WiFi connected: {label}")
+        self._schedule_reconnect_check()
+
     async def disconnect(self):
         self.connected = False
         if self.writer:
@@ -64,7 +104,9 @@ class WiFiManager:
                 pass
             self.writer = None
             self.reader = None
-        self.logger.info(f"Disconnected from {self.host}:{self.port}")
+        if self._server:
+            self._server.close()
+        self.logger.info("WiFi disconnected")
 
     # ------------------------------------------------------------------
     # Read loop — equivalent to BLE notification callbacks
@@ -74,25 +116,27 @@ class WiFiManager:
         """Continuously read data from the TCP socket and forward to EventHandlers."""
         while True:
             if not self.connected or self.reader is None:
-                self.logger.warning(
-                    "WiFi: not connected, attempting reconnect..."
-                )
-                await self.connect()
-                await asyncio.sleep(1)
-                continue
+                if self.server_mode:
+                    # In server mode we wait for the next inbound connection
+                    self.logger.warning("WiFi server: waiting for wallbox to reconnect ...")
+                    await asyncio.sleep(5)
+                    continue
+                else:
+                    self.logger.warning("WiFi: not connected, attempting reconnect ...")
+                    await self.connect()
+                    await asyncio.sleep(1)
+                    continue
 
             try:
                 data = await self.reader.read(4096)
                 if not data:
-                    self.logger.warning(
-                        "WiFi: connection closed by device"
-                    )
+                    self.logger.warning("WiFi: connection closed by device")
                     self.connected = False
                     continue
 
                 self.last_message_time = asyncio.get_event_loop().time()
                 await self.event_handler.receive_notification(
-                    f"{self.host}:{self.port}", bytearray(data)
+                    "wifi", bytearray(data)
                 )
 
             except asyncio.CancelledError:
@@ -106,11 +150,7 @@ class WiFiManager:
     # ------------------------------------------------------------------
 
     async def message_consumer(self, *args, **kwargs):
-        """Drain the outbound queue and write each message to the TCP socket.
-
-        Accepts (and ignores) positional args so it can be called with the
-        same signature used by BLEManager.message_consumer(address, uuid).
-        """
+        """Drain the outbound queue and write each message to the TCP socket."""
         while True:
             if not self.connected or self.writer is None:
                 await asyncio.sleep(1)

@@ -7,7 +7,7 @@ from evseMQTT import BLEManager, Constants, Device, EventHandlers, Commands, Log
 
 class Manager:
     def __init__(self, address, ble_password, unit, mqtt_enabled=False, mqtt_settings=None, logging_level=logging.INFO, rssi=False,
-                 wifi_enabled=False, wifi_address=None, wifi_port=6722):
+                 wifi_enabled=False, wifi_address=None, wifi_port=6722, wifi_server=False):
         self.setup_logging(logging_level)
         self.logger = logging.getLogger("evseMQTT")
         debug = logging_level == logging.DEBUG  # Determine if debug logging is enabled
@@ -36,6 +36,7 @@ class Manager:
                 port=wifi_port,
                 event_handler=self.event_handlers,
                 logger=self.logger,
+                server_mode=wifi_server,
             )
             self.wifi_manager.manager = self
             self.commands.ble_manager = self.wifi_manager
@@ -65,13 +66,20 @@ class Manager:
             await self._run_ble(address)
 
     async def _run_wifi(self):
-        self.logger.info(f"Connecting via WiFi to {self.wifi_manager.host}:{self.wifi_manager.port} ...")
+        consumer = asyncio.create_task(self.wifi_manager.message_consumer())
 
-        if await self.wifi_manager.connect():
-            self.logger.info("WiFi connected.")
+        if self.wifi_manager.server_mode:
+            self.logger.info(f"WiFi server mode: listening on port {self.wifi_manager.port} ...")
+            server_task = asyncio.create_task(self.wifi_manager.serve())
+            connected = True  # serve() handles connections internally
+        else:
+            self.logger.info(f"Connecting via WiFi to {self.wifi_manager.host}:{self.wifi_manager.port} ...")
+            connected = await self.wifi_manager.connect()
+            if connected:
+                self.logger.info("WiFi connected.")
+                asyncio.create_task(self.wifi_manager.read_loop())
 
-            reader_task = asyncio.create_task(self.wifi_manager.read_loop())
-            consumer = asyncio.create_task(self.wifi_manager.message_consumer())
+        if connected:
 
             try:
                 self.logger.info("Waiting for device initialization...")
@@ -214,12 +222,13 @@ def main():
     parser.add_argument("--rssi", action='store_true', help="Monitor Received Signal Strength Indicator (BLE only)")
     parser.add_argument("--logging_level", type=str, default="INFO", help="Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)")
     parser.add_argument("--wifi", action='store_true', help="Connect via WiFi (TCP) instead of BLE")
-    parser.add_argument("--wifi_address", type=str, default="", help="IP address of the Wallbox (WiFi mode)")
-    parser.add_argument("--wifi_port", type=int, default=6722, help="TCP port of the Wallbox (WiFi mode, default 6722)")
+    parser.add_argument("--wifi_address", type=str, default="", help="IP address of the Wallbox (WiFi client mode)")
+    parser.add_argument("--wifi_port", type=int, default=6722, help="TCP port (client: wallbox port, server: port to listen on, default 6722)")
+    parser.add_argument("--wifi_server", action='store_true', help="Run as TCP server — wait for the wallbox to connect to us")
     args = parser.parse_args()
 
-    if args.wifi and not args.wifi_address:
-        parser.error("--wifi_address is required when using --wifi mode")
+    if args.wifi and not args.wifi_server and not args.wifi_address:
+        parser.error("--wifi_address is required in WiFi client mode (or use --wifi_server)")
 
     if not args.wifi and not args.address:
         parser.error("--address is required when using BLE mode")
@@ -244,6 +253,7 @@ def main():
         wifi_enabled=args.wifi,
         wifi_address=args.wifi_address,
         wifi_port=args.wifi_port,
+        wifi_server=args.wifi_server,
     )
 
     # Register signal handlers for common termination signals
