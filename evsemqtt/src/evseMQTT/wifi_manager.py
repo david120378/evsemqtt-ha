@@ -1,6 +1,21 @@
 import asyncio
 import socket
 
+# Discovery broadcast packet: header 06 01, length 25, keyType 0,
+# serial all-FF, password all-FF, cmd 0x0001 (LOGIN_BEACON),
+# checksum 0x0E14, tail 0F 02.
+# Sending this to the wallbox's source port triggers it to resume broadcasting.
+_WAKEUP_PACKET = bytes([
+    0x06, 0x01,                                          # header
+    0x00, 0x19,                                          # length = 25
+    0x00,                                                # keyType
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,     # serial (broadcast)
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,                  # password (broadcast)
+    0x00, 0x01,                                          # cmd = LOGIN_BEACON
+    0x0E, 0x14,                                          # checksum
+    0x0F, 0x02,                                          # tail
+])
+
 
 class _UDPProtocol(asyncio.DatagramProtocol):
     """Low-level asyncio UDP callback handler — bridges datagrams into WiFiManager."""
@@ -31,10 +46,14 @@ class _UDPProtocol(asyncio.DatagramProtocol):
 class WiFiManager:
     """UDP-based connection manager for EVSE wallboxes reachable over WiFi.
 
-    The wallbox sends UDP broadcast datagrams to port 7248 (default).  We bind
-    a UDP socket on that port, receive the broadcasts, and reply unicast to the
+    The wallbox sends UDP broadcast datagrams to port 28376.  We bind a UDP
+    socket on that port, receive the broadcasts, and reply unicast to the
     wallbox's IP/port — which is auto-discovered from the first incoming packet.
     No IP address configuration required.
+
+    If no datagram is received for message_timeout seconds, a wakeup broadcast
+    is sent to the wallbox's last known source port to trigger it to resume
+    broadcasting — without needing a full process restart.
 
     Mirrors the interface of BLEManager so that Commands, EventHandlers and
     Manager can use either transport transparently.
@@ -51,7 +70,7 @@ class WiFiManager:
         self.connected = False
 
         self.last_message_time = None
-        self.message_timeout = 35      # seconds — triggers restart_run if exceeded
+        self.message_timeout = 35      # seconds without a datagram before wakeup is sent
 
         # Set by Manager after instantiation, same pattern as BLEManager
         self.manager = None
@@ -122,7 +141,7 @@ class WiFiManager:
                 self.queue.task_done()
 
     # ------------------------------------------------------------------
-    # Reconnect watchdog — mirrors BLEManager behaviour
+    # Reconnect watchdog
     # ------------------------------------------------------------------
 
     def _schedule_reconnect_check(self):
@@ -137,9 +156,31 @@ class WiFiManager:
             > self.message_timeout
         ):
             self.logger.warning(
-                f"No UDP datagram received in the last {self.message_timeout} s. "
-                "Requesting manager restart."
+                f"No UDP datagram received in {self.message_timeout} s — "
+                "resetting session and sending wakeup broadcast"
             )
-            asyncio.create_task(self.manager.restart_run())
-        else:
-            self._schedule_reconnect_check()
+
+            # Remember the wallbox source port before clearing the address
+            last_port = self.evse_addr[1] if self.evse_addr else self.port
+
+            # Reset connection state so the next incoming datagram triggers re-discovery
+            self.connected = False
+            self.evse_addr = None
+
+            # Reset device state so the full login flow runs again on reconnect
+            if self.manager:
+                self.manager.device.initialization_state = False
+                self.manager.device.logged_in = False
+
+            # Send a discovery broadcast to the wallbox's last known source port.
+            # This mimics the wallbox's own login beacon format and triggers it
+            # to resume broadcasting so we can re-discover it.
+            if self.transport:
+                try:
+                    self.transport.sendto(_WAKEUP_PACKET, ("255.255.255.255", last_port))
+                    self.logger.info(f"Wakeup broadcast sent to 255.255.255.255:{last_port}")
+                except Exception as e:
+                    self.logger.error(f"Wakeup broadcast failed: {e}")
+
+        # Always reschedule to keep checking periodically
+        self._schedule_reconnect_check()
