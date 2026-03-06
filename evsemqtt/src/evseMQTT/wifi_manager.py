@@ -90,6 +90,10 @@ class WiFiManager:
             f"WiFi (UDP) mode: listening on port {self.port} — "
             "waiting for wallbox broadcast ..."
         )
+        # Start the watchdog immediately so a wakeup broadcast is sent if the
+        # wallbox is already silent at startup (e.g. after an HA restart).
+        self.last_message_time = asyncio.get_event_loop().time()
+        self._schedule_reconnect_check()
         # Keep coroutine alive; actual work happens in datagram_received callbacks.
         while True:
             await asyncio.sleep(3600)
