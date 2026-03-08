@@ -122,3 +122,23 @@ Sobald das Addon läuft und die Wallbox erkannt wurde, erscheint unter
 - Transport WiFi: UDP-Broadcast, Port `28376`, Auto-Discovery
 - Transport BLE: GATT Notifications (bleak)
 - Basiert auf: [slespersen/evseMQTT](https://github.com/slespersen/evseMQTT)
+
+---
+
+## Changelog
+
+### v0.1.3 — 2026-03-08
+**Bugfix: Stabilitätsproblem bei eingehenden MQTT-Kommandos im WiFi-Modus behoben**
+
+Im WiFi-Modus konnte das Addon abstürzen, wenn ein MQTT-Kommando (z. B. Laden starten/stoppen) eintraf, während die UDP-Verbindung zur Wallbox kurzzeitig unterbrochen war. Ursache war die Verwendung von `asyncio.run()` im MQTT-Callback, das bei jedem Aufruf einen neuen Event Loop erzeugt — inkompatibel mit der `asyncio.Queue`, die an den Haupt-Event-Loop gebunden ist.
+
+Fix: `asyncio.run()` ersetzt durch `asyncio.run_coroutine_threadsafe()`, das Coroutinen thread-sicher in den laufenden Haupt-Event-Loop einreiht. Zusätzlich wird die Queue jetzt innerhalb von `serve()` initialisiert, um sicherzustellen, dass sie immer im richtigen Loop-Kontext erstellt wird.
+
+### v0.1.2 — 2026-02-xx
+Reconnect-Watchdog direkt beim Start von `serve()` aktiviert.
+
+### v0.1.1 — 2026-02-xx
+Wakeup-Broadcast bei Verbindungsabbruch statt Prozess-Neustart.
+
+### v0.1.0 — 2026-01-xx
+Erstes stabiles Release.
