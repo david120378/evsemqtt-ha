@@ -81,6 +81,10 @@ class WiFiManager:
 
     async def serve(self):
         """Bind the UDP socket and listen indefinitely for wallbox datagrams."""
+        # Re-create the queue here, inside the running event loop, so that it is
+        # guaranteed to be bound to *this* loop.  Creating it in __init__ (outside
+        # any async context) can bind it to a stale/different loop on Python 3.10+.
+        self.queue = asyncio.Queue(5)
         loop = asyncio.get_event_loop()
         await loop.create_datagram_endpoint(
             lambda: _UDPProtocol(self),

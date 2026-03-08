@@ -29,7 +29,15 @@ class MQTTClient:
         self.logger.info(f"Message received: {msg.topic} {msg.payload}")
 
     def set_on_message(self, on_message):
-        self.client.on_message = lambda client, userdata, message: asyncio.run(on_message(client, userdata, message))
+        # asyncio.run() must NOT be used here: it creates a brand-new event loop
+        # every time paho-mqtt fires the callback from its background thread,
+        # but all asyncio objects (Queue, transports, …) are bound to the *main*
+        # event loop.  run_coroutine_threadsafe() schedules the coroutine on the
+        # already-running main loop instead — exactly what we need.
+        loop = asyncio.get_event_loop()
+        self.client.on_message = lambda client, userdata, message: asyncio.run_coroutine_threadsafe(
+            on_message(client, userdata, message), loop
+        )
 
     def on_subscribe(self, client, userdata, mid, granted_qos):
         self.logger.info(f"Subscribed with QoS: {granted_qos}")
