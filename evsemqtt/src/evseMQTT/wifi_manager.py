@@ -1,4 +1,5 @@
 import asyncio
+import os
 import socket
 
 # Discovery broadcast packet: header 06 01, length 25, keyType 0,
@@ -15,6 +16,9 @@ _WAKEUP_PACKET = bytes([
     0x0E, 0x14,                                          # checksum
     0x0F, 0x02,                                          # tail
 ])
+
+# File used to persist the wallbox IP across add-on restarts.
+_IP_CACHE_FILE = "/data/last_wallbox_ip.txt"
 
 
 class _UDPProtocol(asyncio.DatagramProtocol):
@@ -49,31 +53,69 @@ class WiFiManager:
     The wallbox sends UDP broadcast datagrams to port 28376.  We bind a UDP
     socket on that port, receive the broadcasts, and reply unicast to the
     wallbox's IP/port — which is auto-discovered from the first incoming packet.
-    No IP address configuration required.
 
-    If no datagram is received for message_timeout seconds, a wakeup broadcast
-    is sent to the wallbox's last known source port to trigger it to resume
-    broadcasting — without needing a full process restart.
+    If a static IP is provided via wifi_ip, or a cached IP is available from a
+    previous session, wakeup packets are sent directly to that IP in addition to
+    the broadcast address — significantly improving reconnect reliability when
+    the wallbox has stopped broadcasting.
+
+    If no datagram is received for message_timeout seconds, wakeup packets are
+    sent and then retried every reconnect_interval seconds until the wallbox
+    responds — without needing a full process restart.
 
     Mirrors the interface of BLEManager so that Commands, EventHandlers and
     Manager can use either transport transparently.
     """
 
-    def __init__(self, port, event_handler, logger):
+    def __init__(self, port, event_handler, logger, wifi_ip=None):
         self.port = port
         self.event_handler = event_handler
         self.logger = logger
+        self.wifi_ip = wifi_ip             # optional static IP from add-on config
 
-        self.transport = None          # asyncio.DatagramTransport, set by _UDPProtocol
-        self.evse_addr = None          # (ip, port) of wallbox, discovered on first packet
-        self.queue = asyncio.Queue(5)  # outbound message queue (same as BLEManager)
+        self.transport = None              # asyncio.DatagramTransport, set by _UDPProtocol
+        self.evse_addr = None             # (ip, port) of wallbox, discovered on first packet
+        self.queue = asyncio.Queue(5)     # outbound message queue (same as BLEManager)
         self.connected = False
 
         self.last_message_time = None
-        self.message_timeout = 35      # seconds without a datagram before wakeup is sent
+        self.message_timeout = 35         # seconds without a datagram before wakeup is sent
+        self.reconnect_interval = 10      # seconds between retries while disconnected
+
+        self._reconnect_handle = None     # cancellable asyncio handle for the watchdog
+
+        # Load the last known wallbox IP from disk so we can target it directly
+        # on the very first wakeup attempt after an add-on restart.
+        self.last_known_ip = self._load_cached_ip()
+        if self.last_known_ip:
+            self.logger.info(f"Loaded cached wallbox IP: {self.last_known_ip}")
 
         # Set by Manager after instantiation, same pattern as BLEManager
         self.manager = None
+
+    # ------------------------------------------------------------------
+    # IP cache helpers
+    # ------------------------------------------------------------------
+
+    def _load_cached_ip(self):
+        """Return the last known wallbox IP from disk, or None."""
+        try:
+            with open(_IP_CACHE_FILE, "r") as f:
+                ip = f.read().strip()
+                if ip:
+                    return ip
+        except (FileNotFoundError, IOError):
+            pass
+        return None
+
+    def _save_cached_ip(self, ip):
+        """Persist the wallbox IP to disk for use after add-on restarts."""
+        try:
+            with open(_IP_CACHE_FILE, "w") as f:
+                f.write(ip)
+            self.logger.debug(f"Cached wallbox IP: {ip}")
+        except IOError as e:
+            self.logger.warning(f"Could not save wallbox IP to cache: {e}")
 
     # ------------------------------------------------------------------
     # Startup / shutdown
@@ -94,8 +136,8 @@ class WiFiManager:
             f"WiFi (UDP) mode: listening on port {self.port} — "
             "waiting for wallbox broadcast ..."
         )
-        # Start the watchdog immediately so a wakeup broadcast is sent if the
-        # wallbox is already silent at startup (e.g. after an HA restart).
+        # Start the watchdog immediately so a wakeup is sent if the wallbox is
+        # already silent at startup (e.g. after an HA restart).
         self.last_message_time = asyncio.get_event_loop().time()
         self._schedule_reconnect_check()
         # Keep coroutine alive; actual work happens in datagram_received callbacks.
@@ -103,6 +145,7 @@ class WiFiManager:
             await asyncio.sleep(3600)
 
     async def disconnect(self):
+        self._cancel_reconnect()
         self.connected = False
         if self.transport:
             self.transport.close()
@@ -120,7 +163,12 @@ class WiFiManager:
         if not self.connected:
             self.evse_addr = addr
             self.connected = True
+            # Persist the IP so future restarts can send a targeted wakeup immediately.
+            if addr[0] != self.last_known_ip:
+                self.last_known_ip = addr[0]
+                self._save_cached_ip(addr[0])
             self.logger.info(f"Wallbox discovered at {addr[0]}:{addr[1]}")
+            # Reset the watchdog to a full message_timeout from now.
             self._schedule_reconnect_check()
 
         await self.event_handler.receive_notification("wifi", bytearray(data))
@@ -152,43 +200,78 @@ class WiFiManager:
     # Reconnect watchdog
     # ------------------------------------------------------------------
 
+    def _cancel_reconnect(self):
+        """Cancel any pending watchdog or retry callback."""
+        if self._reconnect_handle is not None:
+            self._reconnect_handle.cancel()
+            self._reconnect_handle = None
+
     def _schedule_reconnect_check(self):
-        asyncio.get_event_loop().call_later(
+        """Schedule the next watchdog check at the normal message_timeout interval."""
+        self._cancel_reconnect()
+        self._reconnect_handle = asyncio.get_event_loop().call_later(
             self.message_timeout, self._check_reconnect
         )
 
+    def _schedule_retry(self):
+        """Schedule the next wakeup retry at the faster reconnect_interval."""
+        self._cancel_reconnect()
+        self._reconnect_handle = asyncio.get_event_loop().call_later(
+            self.reconnect_interval, self._check_reconnect
+        )
+
+    def _send_wakeup(self):
+        """Send wakeup packets to both the broadcast address and the known wallbox IP."""
+        if not self.transport:
+            return
+
+        # 1. Broadcast — catches the wallbox even if its IP has changed.
+        try:
+            self.transport.sendto(_WAKEUP_PACKET, ("255.255.255.255", self.port))
+            self.logger.info(f"Wakeup broadcast sent to 255.255.255.255:{self.port}")
+        except Exception as e:
+            self.logger.error(f"Wakeup broadcast failed: {e}")
+
+        # 2. Direct unicast to the configured or last known IP — much more reliable
+        #    when the wallbox has stopped broadcasting but is still reachable.
+        target_ip = self.wifi_ip or self.last_known_ip
+        if target_ip:
+            try:
+                self.transport.sendto(_WAKEUP_PACKET, (target_ip, self.port))
+                self.logger.info(f"Wakeup sent directly to {target_ip}:{self.port}")
+            except Exception as e:
+                self.logger.error(f"Direct wakeup to {target_ip} failed: {e}")
+
     def _check_reconnect(self):
-        if (
-            self.last_message_time is not None
-            and asyncio.get_event_loop().time() - self.last_message_time
-            > self.message_timeout
-        ):
-            self.logger.warning(
-                f"No UDP datagram received in {self.message_timeout} s — "
-                "resetting session and sending wakeup broadcast"
-            )
+        self._reconnect_handle = None
 
-            # Remember the wallbox source port before clearing the address
-            last_port = self.evse_addr[1] if self.evse_addr else self.port
+        if self.last_message_time is None:
+            self._schedule_reconnect_check()
+            return
 
-            # Reset connection state so the next incoming datagram triggers re-discovery
-            self.connected = False
-            self.evse_addr = None
+        elapsed = asyncio.get_event_loop().time() - self.last_message_time
 
-            # Reset device state so the full login flow runs again on reconnect
-            if self.manager:
-                self.manager.device.initialization_state = False
-                self.manager.device.logged_in = False
+        if elapsed >= self.message_timeout:
+            # First time detecting a timeout: log + reset connection state.
+            if self.connected:
+                self.logger.warning(
+                    f"No UDP datagram received in {self.message_timeout} s — "
+                    "resetting session and sending wakeup"
+                )
+                self.connected = False
+                self.evse_addr = None
+                # Reset device state so the full login flow runs again on reconnect.
+                if self.manager:
+                    self.manager.device.initialization_state = False
+                    self.manager.device.logged_in = False
+            else:
+                self.logger.info(
+                    f"Still no UDP datagram after {elapsed:.0f} s — retrying wakeup"
+                )
 
-            # Send a discovery broadcast to the wallbox's last known source port.
-            # This mimics the wallbox's own login beacon format and triggers it
-            # to resume broadcasting so we can re-discover it.
-            if self.transport:
-                try:
-                    self.transport.sendto(_WAKEUP_PACKET, ("255.255.255.255", last_port))
-                    self.logger.info(f"Wakeup broadcast sent to 255.255.255.255:{last_port}")
-                except Exception as e:
-                    self.logger.error(f"Wakeup broadcast failed: {e}")
-
-        # Always reschedule to keep checking periodically
-        self._schedule_reconnect_check()
+            self._send_wakeup()
+            # Retry frequently until the wallbox responds.
+            self._schedule_retry()
+        else:
+            # Recent data received — back to normal watchdog interval.
+            self._schedule_reconnect_check()

@@ -1,6 +1,6 @@
 [project]
 name = "evseMQTT"
-version = "0.1.3"
+version = "0.1.4"
 readme = "README.md"
 license = { file = "LICENSE" }
 keywords = ["evse", "mqtt", "BESEN", "BS20", "WALLBOX", "BLE"]

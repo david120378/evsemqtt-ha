@@ -57,6 +57,7 @@ Die Wallbox sendet alle ~3 Sekunden einen **UDP-Broadcast** (Port `28376`) ins l
 |--------|-------------|---------|
 | `WIFI_ENABLED` | `true` für WiFi-Modus (UDP), `false` für BLE | `false` |
 | `WIFI_PORT` | UDP-Port auf dem die Wallbox Broadcasts sendet | `28376` |
+| `WIFI_IP` | Optionale statische IP der Wallbox (verbessert Reconnect-Zuverlässigkeit) | — |
 | `BLE_ADDRESS` | MAC-Adresse der Wallbox (nur BLE-Modus) | — |
 | `BLE_PASSWORD` | 6-stelliger PIN der Wallbox | `123456` |
 | `UNIT` | Einheit für Leistungsanzeige: `W` oder `kW` | `W` |
@@ -126,6 +127,17 @@ Sobald das Addon läuft und die Wallbox erkannt wurde, erscheint unter
 ---
 
 ## Changelog
+
+### v0.1.4 — 2026-03-13
+**Verbesserung: Robusterer Reconnect-Mechanismus im WiFi-Modus**
+
+Wenn die Wallbox kurzzeitig aufhört, UDP-Broadcasts zu senden (z. B. nach einem Stromausfall oder App-Zugriff), reichte der bisherige Broadcast-Wakeup (`255.255.255.255`) allein nicht immer aus — insbesondere wenn die Wallbox zwar erreichbar, aber im Broadcast-"Schlaf" war.
+
+Neue Funktionen:
+- **IP-Caching**: Die zuletzt gesehene Wallbox-IP wird in `/data/last_wallbox_ip.txt` gespeichert und nach einem Add-on-Neustart sofort für direkten Wakeup genutzt.
+- **Direkter Unicast-Wakeup**: Wakeup-Pakete werden jetzt an Broadcast UND an die bekannte/konfigurierte Wallbox-IP gesendet, was die Reconnect-Zuverlässigkeit deutlich verbessert.
+- **Schnellere Retry-Schleife**: Nach einem Verbindungsabbruch werden Wakeup-Pakete alle 10 Sekunden wiederholt (statt alle 35 Sekunden).
+- **Neues Konfigurations-Feld `WIFI_IP`**: Optionale statische IP der Wallbox — nützlich wenn DHCP-Adressänderungen vorkommen.
 
 ### v0.1.3 — 2026-03-08
 **Bugfix: Stabilitätsproblem bei eingehenden MQTT-Kommandos im WiFi-Modus behoben**
