@@ -205,10 +205,28 @@ class EventHandlers:
             await self.commands.get_charge_status_record()
             await asyncio.sleep(2)  # Ugly hack - but hey ... it works
         
-        if cmd == 3 and self.device.initialization_state:
-            self.logger.info(f"Device sent heartbeat - replying")
-            await self.commands.heartbeat()
-            await self.commands.set_config_time()
+        if cmd == 3:
+            if not self.device.initialization_state:
+                # Session recovery: the wallbox still considers us connected and is
+                # sending heartbeats.  Re-hydrate our state from the packet identifier
+                # so we can reply without waiting for a new login-beacon flow.
+                self.logger.info(
+                    "Session recovery via heartbeat — restoring device state and re-querying config"
+                )
+                self.device.info = {'serial': parsed_data['identifier']}  # sets initialization_state = True
+                self.device.logged_in = True
+                await self.commands.heartbeat()
+                await self.commands.set_config_time()
+                await self.commands.get_config_temperature_unit()
+                await self.commands.get_config_version()
+                await self.commands.get_config_name()
+                await self.commands.get_config_output_amps()
+                await self.commands.get_config_language()
+                await self.commands.get_charge_status_record()
+            else:
+                self.logger.info(f"Device sent heartbeat - replying")
+                await self.commands.heartbeat()
+                await self.commands.set_config_time()
         
         # Before we forward the message, we check if:
         #   - the callback exists

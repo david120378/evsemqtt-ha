@@ -291,6 +291,9 @@ class WiFiManager:
                 if self.manager:
                     self.manager.device.initialization_state = False
                     self.manager.device.logged_in = False
+                    # Reset software_version so the full login flow re-runs on
+                    # reconnect (event_handlers checks "software_version is None").
+                    self.manager.device.info = {'software_version': None}
             else:
                 self.logger.info(
                     f"Still no UDP datagram after {elapsed:.0f} s — retrying wakeup"
