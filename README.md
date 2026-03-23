@@ -128,6 +128,15 @@ Sobald das Addon läuft und die Wallbox erkannt wurde, erscheint unter
 
 ## Changelog
 
+### v0.1.6 — 2026-03-23
+**Bugfix: Automatischer Reconnect ohne App-Eingriff**
+
+Nach einem HA-Neustart oder einem kurzzeitigen Verbindungsabbruch sendete die Wallbox weiterhin **Heartbeat-Pakete** (statt neue Login-Beacons) — da sie die Session noch als aktiv betrachtete. Das Addon ignorierte diese Heartbeats, weil `initialization_state = False` war. Die Wallbox wartete vergeblich auf eine Antwort, timeout-te schließlich und hörte ganz auf zu senden. Danach half nur noch das Öffnen der App.
+
+Zwei Fixes:
+- **Session Recovery via Heartbeat**: Empfängt das Addon einen Heartbeat (cmd=3) ohne initialisiert zu sein, extrahiert es den Serial aus dem Paket-Header, stellt den Geräte-State wieder her (`initialization_state=True`, `logged_in=True`), beantwortet den Heartbeat sofort und fragt die Konfiguration neu ab — ohne den vollen Login-Beacon-Flow.
+- **`software_version` Reset bei Timeout**: Beim Reconnect-Watchdog wurde `software_version` nicht zurückgesetzt, was den Login-Flow nach einem Timeout blockiert hat.
+
 ### v0.1.4 — 2026-03-13
 **Verbesserung: Robusterer Reconnect-Mechanismus im WiFi-Modus**
 

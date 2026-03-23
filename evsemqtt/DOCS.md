@@ -31,8 +31,17 @@ Bei Verwendung des Mosquitto-Addons: `MQTT_BROKER` auf `core-mosquitto` setzen.
 
 `UNIT` auf `W` (Watt) oder `kW` (Kilowatt) setzen.
 
+## Reconnect-Verhalten
+
+Das Addon verbindet sich nach einem HA-Neustart oder Verbindungsabbruch **automatisch** neu:
+
+- Sendet die Wallbox noch Heartbeats (sie hält die Session für aktiv), erkennt das Addon das und antwortet sofort — ohne neue Login-Beacons abzuwarten.
+- Sendet die Wallbox neue Login-Beacons, läuft der vollständige Login-Flow erneut durch.
+- Hört die Wallbox ganz auf zu senden, verschickt das Addon alle 10 Sekunden einen Wakeup-Broadcast (und Unicast an die zuletzt bekannte IP), um sie wieder zu aktivieren.
+
 ## Troubleshooting
 
 - `LOGGING_LEVEL` auf `DEBUG` setzen für detaillierte Logs
 - Bei BLE-Abstürzen: `SYS_MODULE_TO_RELOAD` auf `btusb` (USB-Dongle) oder `hci_uart` (Raspberry Pi) setzen
 - PIN der Wallbox unter `BLE_PASSWORD` prüfen (Standard: `123456`)
+- Im Log nach `Session recovery via heartbeat` suchen — das bestätigt, dass der automatische Reconnect funktioniert hat
