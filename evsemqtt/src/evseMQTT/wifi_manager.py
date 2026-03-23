@@ -1,21 +1,28 @@
 import asyncio
 import os
 import socket
+import struct
 
 # Discovery broadcast packet: header 06 01, length 25, keyType 0,
-# serial all-FF, password all-FF, cmd 0x0001 (LOGIN_BEACON),
-# checksum 0x0E14, tail 0F 02.
-# Sending this to the wallbox's source port triggers it to resume broadcasting.
-_WAKEUP_PACKET = bytes([
-    0x06, 0x01,                                          # header
-    0x00, 0x19,                                          # length = 25
-    0x00,                                                # keyType
-    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,     # serial (broadcast)
-    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,                  # password (broadcast)
-    0x00, 0x01,                                          # cmd = LOGIN_BEACON
-    0x0E, 0x14,                                          # checksum
-    0x0F, 0x02,                                          # tail
-])
+# serial all-FF, password all-FF, cmd 0x0001 (LOGIN_BEACON), tail 0F 02.
+# Checksum = sum(all bytes before checksum) % 0xFFFF:
+#   6+1+0+25+0 + 14×0xFF + 0+1 = 3603 = 0x0E13
+# Sending this causes the wallbox to resume its login-beacon broadcasts.
+def _build_wakeup_packet():
+    body = bytearray([
+        0x06, 0x01,                                          # header
+        0x00, 0x19,                                          # length = 25
+        0x00,                                                # keyType
+        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,     # serial (broadcast)
+        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,                  # password (broadcast)
+        0x00, 0x01,                                          # cmd = LOGIN_BEACON
+    ])
+    checksum = sum(body) % 0xFFFF
+    body.extend(struct.pack(">H", checksum))
+    body.extend([0x0F, 0x02])                                # tail
+    return bytes(body)
+
+_WAKEUP_PACKET = _build_wakeup_packet()
 
 # File used to persist the wallbox IP across add-on restarts.
 _IP_CACHE_FILE = "/data/last_wallbox_ip.txt"
@@ -83,6 +90,10 @@ class WiFiManager:
         self.reconnect_interval = 10      # seconds between retries while disconnected
 
         self._reconnect_handle = None     # cancellable asyncio handle for the watchdog
+
+        # Remember the wallbox source port (ephemeral, e.g. 36419) so wakeup
+        # packets can be directed there in addition to self.port.
+        self.last_known_port = None
 
         # Load the last known wallbox IP from disk so we can target it directly
         # on the very first wakeup attempt after an add-on restart.
@@ -163,6 +174,8 @@ class WiFiManager:
         if not self.connected:
             self.evse_addr = addr
             self.connected = True
+            # Remember source port so wakeup can target it directly.
+            self.last_known_port = addr[1]
             # Persist the IP so future restarts can send a targeted wakeup immediately.
             if addr[0] != self.last_known_ip:
                 self.last_known_ip = addr[0]
@@ -221,26 +234,40 @@ class WiFiManager:
         )
 
     def _send_wakeup(self):
-        """Send wakeup packets to both the broadcast address and the known wallbox IP."""
+        """Send wakeup packets to the broadcast address and, if known, directly to the wallbox.
+
+        Two destination ports are tried for each target address:
+          - self.port (28376): the port our addon listens on; the wallbox may also
+            accept commands there.
+          - last_known_port: the ephemeral source port the wallbox used in its last
+            session (e.g. 36419); this is the port it was bound to and may still be
+            listening on.
+        """
         if not self.transport:
             return
 
-        # 1. Broadcast — catches the wallbox even if its IP has changed.
-        try:
-            self.transport.sendto(_WAKEUP_PACKET, ("255.255.255.255", self.port))
-            self.logger.info(f"Wakeup broadcast sent to 255.255.255.255:{self.port}")
-        except Exception as e:
-            self.logger.error(f"Wakeup broadcast failed: {e}")
+        ports_to_try = {self.port}
+        if self.last_known_port and self.last_known_port != self.port:
+            ports_to_try.add(self.last_known_port)
 
-        # 2. Direct unicast to the configured or last known IP — much more reliable
-        #    when the wallbox has stopped broadcasting but is still reachable.
         target_ip = self.wifi_ip or self.last_known_ip
-        if target_ip:
+
+        for port in sorted(ports_to_try):
+            # 1. Broadcast — catches the wallbox even if its IP has changed.
             try:
-                self.transport.sendto(_WAKEUP_PACKET, (target_ip, self.port))
-                self.logger.info(f"Wakeup sent directly to {target_ip}:{self.port}")
+                self.transport.sendto(_WAKEUP_PACKET, ("255.255.255.255", port))
+                self.logger.info(f"Wakeup broadcast sent to 255.255.255.255:{port}")
             except Exception as e:
-                self.logger.error(f"Direct wakeup to {target_ip} failed: {e}")
+                self.logger.error(f"Wakeup broadcast to port {port} failed: {e}")
+
+            # 2. Direct unicast to the configured or last known IP — more reliable
+            #    when the wallbox has stopped broadcasting but is still reachable.
+            if target_ip:
+                try:
+                    self.transport.sendto(_WAKEUP_PACKET, (target_ip, port))
+                    self.logger.info(f"Wakeup sent directly to {target_ip}:{port}")
+                except Exception as e:
+                    self.logger.error(f"Direct wakeup to {target_ip}:{port} failed: {e}")
 
     def _check_reconnect(self):
         self._reconnect_handle = None
