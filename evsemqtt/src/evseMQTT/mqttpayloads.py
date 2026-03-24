@@ -5,13 +5,25 @@ class MQTTPayloads:
     def __init__(self, device):
         self.device = device
         
+        # Use MAC as the device identifier when available (BLE mode always has it;
+        # WiFi mode gets it from cmd=1 login-beacon or the device-info cache).
+        # Fall back to a serial-based identifier when MAC is absent so that the
+        # identifier is always stable across add-on restarts.
+        mac = self.device.info['mac']
+        if mac:
+            identifiers  = [mac]
+            connections  = [["mac", mac]]
+        else:
+            identifiers  = [f"evsemqtt_{self.device.info['serial']}"]
+            connections  = []
+
         self.base_device = {
             "device": {
-                "identifiers": [self.device.info['mac']],
-                "name": f"{self.device.info['manufacturer']} {self.device.info['model']}", # Should be using the advertised name "ACP#<name>" 
+                "identifiers": identifiers,
+                "name": f"{self.device.info['manufacturer']} {self.device.info['model']}",
                 "manufacturer": self.device.info['manufacturer'],
                 "model": self.device.info['model'],
-                "connections": [["mac", self.device.info['mac']]],
+                "connections": connections,
                 "serial_number": self.device.info['serial'],
                 "sw_version": str(self.device.info['software_version'])
             }
