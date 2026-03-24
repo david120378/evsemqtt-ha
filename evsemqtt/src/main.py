@@ -40,6 +40,19 @@ class Manager:
             self.wifi_manager.manager = self
             self.commands.ble_manager = self.wifi_manager
             self.ble_manager = None
+
+            # Restore device info cached from a previous session (mac, model, …)
+            # so that MQTTPayloads always builds consistent discovery configs even
+            # when session recovery bypasses the login-beacon (cmd=1) flow.
+            if self.wifi_manager.cached_device_info:
+                for key, value in self.wifi_manager.cached_device_info.items():
+                    try:
+                        self.device.info = {key: value}
+                    except KeyError:
+                        pass
+                self.logger.info(
+                    f"Restored cached device info: {self.wifi_manager.cached_device_info}"
+                )
         else:
             self.ble_manager = BLEManager(event_handler=self.event_handlers, logger=self.logger)
             self.ble_manager.manager = self

@@ -184,6 +184,10 @@ class EventHandlers:
         
         if cmd == 1 and self.device.initialization_state and not self.device.logged_in:
             self.logger.info(f"Device sent login banner - requesting login")
+            # Persist mac, model and other stable fields so they survive restarts
+            # where session recovery bypasses the login-beacon (cmd=1) flow.
+            if hasattr(self.commands.ble_manager, 'record_device_info'):
+                self.commands.ble_manager.record_device_info(self.device.info)
             await self.commands.login_request()
             await self.commands.set_charge_fee()
             await self.commands.set_charge_service_fee()

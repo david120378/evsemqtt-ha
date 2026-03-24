@@ -1,4 +1,5 @@
 import asyncio
+import json
 import os
 import socket
 import struct
@@ -27,6 +28,7 @@ _WAKEUP_PACKET = _build_wakeup_packet()
 # Files used to persist wallbox state across add-on restarts.
 _IP_CACHE_FILE     = "/data/last_wallbox_ip.txt"
 _SERIAL_CACHE_FILE = "/data/last_wallbox_serial.txt"
+_DEVICE_CACHE_FILE = "/data/last_wallbox_device.json"
 
 
 class _UDPProtocol(asyncio.DatagramProtocol):
@@ -106,6 +108,10 @@ class WiFiManager:
         if self.last_known_serial:
             self.logger.info(f"Loaded cached wallbox serial: {self.last_known_serial}")
 
+        # Device info (mac, model, …) needed for MQTT discovery — cached so it
+        # survives restarts where session recovery bypasses the login-beacon (cmd=1).
+        self.cached_device_info = self._load_cached_device_info()
+
         # Set by Manager after instantiation, same pattern as BLEManager
         self.manager = None
 
@@ -153,6 +159,23 @@ class WiFiManager:
         except IOError as e:
             self.logger.warning(f"Could not save wallbox serial to cache: {e}")
 
+    def _load_cached_device_info(self):
+        """Return the cached device info dict (mac, model, etc.), or None."""
+        try:
+            with open(_DEVICE_CACHE_FILE, "r") as f:
+                return json.load(f)
+        except (FileNotFoundError, IOError, json.JSONDecodeError):
+            return None
+
+    def _save_cached_device_info(self, info):
+        """Persist key device info fields to disk for use after add-on restarts."""
+        try:
+            with open(_DEVICE_CACHE_FILE, "w") as f:
+                json.dump(info, f)
+            self.logger.debug(f"Cached device info: {info}")
+        except IOError as e:
+            self.logger.warning(f"Could not save device info to cache: {e}")
+
     def record_serial(self, serial):
         """Called externally (e.g. from event_handlers) to persist the serial immediately
         after a successful login or session recovery — ensuring it survives a restart."""
@@ -160,6 +183,17 @@ class WiFiManager:
             self.last_known_serial = serial
             self._save_cached_serial(serial)
             self.logger.info(f"Wallbox serial cached: {serial}")
+
+    def record_device_info(self, info):
+        """Called externally after cmd=1 (login beacon) to persist stable device
+        fields (mac, model, manufacturer, phases, output_max_amps) to disk."""
+        fields = {k: v for k, v in info.items()
+                  if k in ('mac', 'model', 'manufacturer', 'phases', 'output_max_amps')
+                  and v is not None}
+        if fields:
+            self.cached_device_info = fields
+            self._save_cached_device_info(fields)
+            self.logger.info(f"Cached device info: {fields}")
 
     # ------------------------------------------------------------------
     # Startup / shutdown
