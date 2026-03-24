@@ -68,7 +68,11 @@ class MQTTClient:
     def publish_discovery(self, discovery_payload):
         if isinstance(discovery_payload, list):
             for element in discovery_payload:
-                self.client.publish(element["config_topic"], json.dumps(element), retain=True)
+                topic = element["config_topic"]
+                payload = {k: v for k, v in element.items() if k != "config_topic"}
+                self.client.publish(topic, json.dumps(payload), retain=True)
         else:
-            self.client.publish(f'homeassistant/{discovery_payload["device_class"]}/{discovery_payload["unique_id"]}/config', json.dumps(discovery_payload), retain=True)
+            topic = f'homeassistant/{discovery_payload["device_class"]}/{discovery_payload["unique_id"]}/config'
+            payload = {k: v for k, v in discovery_payload.items() if k != "config_topic"}
+            self.client.publish(topic, json.dumps(payload), retain=True)
         self.connected = True
