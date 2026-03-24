@@ -190,6 +190,10 @@ class EventHandlers:
             
         if cmd == 2 and self.device.info['software_version'] is None and not self.device.logged_in:
             self.logger.info(f"Device sent response to login request - confirming login")
+            # If we sent a LOGIN_REQUEST as wakeup (bypassing the beacon flow) the
+            # serial is already known but initialization_state may still be False.
+            if not self.device.initialization_state and self.device.info.get('serial'):
+                self.device.initialization_state = True
             
             await self.commands.login_confirm()
             

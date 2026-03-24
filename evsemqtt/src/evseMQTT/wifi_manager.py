@@ -24,8 +24,9 @@ def _build_wakeup_packet():
 
 _WAKEUP_PACKET = _build_wakeup_packet()
 
-# File used to persist the wallbox IP across add-on restarts.
-_IP_CACHE_FILE = "/data/last_wallbox_ip.txt"
+# Files used to persist wallbox state across add-on restarts.
+_IP_CACHE_FILE     = "/data/last_wallbox_ip.txt"
+_SERIAL_CACHE_FILE = "/data/last_wallbox_serial.txt"
 
 
 class _UDPProtocol(asyncio.DatagramProtocol):
@@ -95,11 +96,15 @@ class WiFiManager:
         # packets can be directed there in addition to self.port.
         self.last_known_port = None
 
-        # Load the last known wallbox IP from disk so we can target it directly
-        # on the very first wakeup attempt after an add-on restart.
+        # Load the last known wallbox IP and serial from disk so we can send a
+        # proper LOGIN_REQUEST on the very first wakeup attempt after a restart.
         self.last_known_ip = self._load_cached_ip()
         if self.last_known_ip:
             self.logger.info(f"Loaded cached wallbox IP: {self.last_known_ip}")
+
+        self.last_known_serial = self._load_cached_serial()
+        if self.last_known_serial:
+            self.logger.info(f"Loaded cached wallbox serial: {self.last_known_serial}")
 
         # Set by Manager after instantiation, same pattern as BLEManager
         self.manager = None
@@ -127,6 +132,26 @@ class WiFiManager:
             self.logger.debug(f"Cached wallbox IP: {ip}")
         except IOError as e:
             self.logger.warning(f"Could not save wallbox IP to cache: {e}")
+
+    def _load_cached_serial(self):
+        """Return the last known wallbox serial from disk, or None."""
+        try:
+            with open(_SERIAL_CACHE_FILE, "r") as f:
+                serial = f.read().strip()
+                if serial:
+                    return serial
+        except (FileNotFoundError, IOError):
+            pass
+        return None
+
+    def _save_cached_serial(self, serial):
+        """Persist the wallbox serial to disk for use after add-on restarts."""
+        try:
+            with open(_SERIAL_CACHE_FILE, "w") as f:
+                f.write(serial)
+            self.logger.debug(f"Cached wallbox serial: {serial}")
+        except IOError as e:
+            self.logger.warning(f"Could not save wallbox serial to cache: {e}")
 
     # ------------------------------------------------------------------
     # Startup / shutdown
@@ -236,12 +261,11 @@ class WiFiManager:
     def _send_wakeup(self):
         """Send wakeup packets to the broadcast address and, if known, directly to the wallbox.
 
-        Two destination ports are tried for each target address:
-          - self.port (28376): the port our addon listens on; the wallbox may also
-            accept commands there.
-          - last_known_port: the ephemeral source port the wallbox used in its last
-            session (e.g. 36419); this is the port it was bound to and may still be
-            listening on.
+        Three strategies are attempted in order:
+          1. Broadcast LOGIN_BEACON (all-FF) — catches the wallbox even if its IP changed.
+          2. Unicast LOGIN_BEACON to the last known IP — more reliable when IP is stable.
+          3. Unicast LOGIN_REQUEST with the real serial — mimics what the phone app does
+             and is the most effective way to wake a completely silent wallbox.
         """
         if not self.transport:
             return
@@ -260,14 +284,41 @@ class WiFiManager:
             except Exception as e:
                 self.logger.error(f"Wakeup broadcast to port {port} failed: {e}")
 
-            # 2. Direct unicast to the configured or last known IP — more reliable
-            #    when the wallbox has stopped broadcasting but is still reachable.
+            # 2. Direct unicast LOGIN_BEACON to the configured or last known IP.
             if target_ip:
                 try:
                     self.transport.sendto(_WAKEUP_PACKET, (target_ip, port))
                     self.logger.info(f"Wakeup sent directly to {target_ip}:{port}")
                 except Exception as e:
                     self.logger.error(f"Direct wakeup to {target_ip}:{port} failed: {e}")
+
+        # 3. Proper LOGIN_REQUEST with the real serial, sent directly to the wallbox.
+        #    This is what the phone app does and is the most reliable wakeup method.
+        #    Opportunistically persist the serial to disk whenever it is available.
+        serial = None
+        password = "123456"
+        if self.manager:
+            serial = self.manager.device.info.get("serial") or self.last_known_serial
+            if self.manager.device.info.get("serial") and \
+                    self.manager.device.info["serial"] != self.last_known_serial:
+                self.last_known_serial = self.manager.device.info["serial"]
+                self._save_cached_serial(self.last_known_serial)
+            password = getattr(self.manager.device, "ble_password", "123456") or "123456"
+        else:
+            serial = self.last_known_serial
+
+        if serial and target_ip:
+            port_to_use = self.last_known_port or self.port
+            try:
+                from .utils import Utils
+                login_cmd = bytes(Utils.build_command(serial, password, 32770))
+                self.transport.sendto(login_cmd, (target_ip, port_to_use))
+                self.logger.info(
+                    f"Login request wakeup sent to {target_ip}:{port_to_use} "
+                    f"(serial={serial})"
+                )
+            except Exception as e:
+                self.logger.warning(f"Login request wakeup failed: {e}")
 
     def _check_reconnect(self):
         self._reconnect_handle = None
