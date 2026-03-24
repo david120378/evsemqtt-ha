@@ -94,9 +94,29 @@ class Manager:
                 self.mqtt_client.set_on_message(self.mqtt_callback.delegate)
                 self.mqtt_client.publish_availability(self.device.info['serial'], "online")
 
+            # Track initialization_state so we can publish availability changes.
+            prev_initialized = True
             while True:
                 await asyncio.sleep(1)
                 self.logger.debug("Idling...")
+
+                if not self.mqtt_client or not self.mqtt_client.connected:
+                    prev_initialized = self.device.initialization_state
+                    continue
+
+                serial = self.device.info.get('serial')
+                if not serial:
+                    prev_initialized = self.device.initialization_state
+                    continue
+
+                if self.device.initialization_state != prev_initialized:
+                    if self.device.initialization_state:
+                        self.logger.info("Wallbox reconnected — publishing availability online")
+                        self.mqtt_client.publish_availability(serial, "online")
+                    else:
+                        self.logger.warning("Wallbox disconnected — publishing availability offline")
+                        self.mqtt_client.publish_availability(serial, "offline")
+                    prev_initialized = self.device.initialization_state
 
         except (KeyboardInterrupt, SystemExit):
             self.logger.info("Interrupted, cleaning up...")
