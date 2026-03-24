@@ -280,7 +280,7 @@ class WiFiManager:
             # 1. Broadcast — catches the wallbox even if its IP has changed.
             try:
                 self.transport.sendto(_WAKEUP_PACKET, ("255.255.255.255", port))
-                self.logger.info(f"Wakeup broadcast sent to 255.255.255.255:{port}")
+                self.logger.warning(f"Wakeup broadcast sent to 255.255.255.255:{port}")
             except Exception as e:
                 self.logger.error(f"Wakeup broadcast to port {port} failed: {e}")
 
@@ -288,7 +288,7 @@ class WiFiManager:
             if target_ip:
                 try:
                     self.transport.sendto(_WAKEUP_PACKET, (target_ip, port))
-                    self.logger.info(f"Wakeup sent directly to {target_ip}:{port}")
+                    self.logger.warning(f"Wakeup sent directly to {target_ip}:{port}")
                 except Exception as e:
                     self.logger.error(f"Direct wakeup to {target_ip}:{port} failed: {e}")
 
@@ -313,7 +313,7 @@ class WiFiManager:
                 from .utils import Utils
                 login_cmd = bytes(Utils.build_command(serial, password, 32770))
                 self.transport.sendto(login_cmd, (target_ip, port_to_use))
-                self.logger.info(
+                self.logger.warning(
                     f"Login request wakeup sent to {target_ip}:{port_to_use} "
                     f"(serial={serial})"
                 )
@@ -346,7 +346,7 @@ class WiFiManager:
                     # reconnect (event_handlers checks "software_version is None").
                     self.manager.device.info = {'software_version': None}
             else:
-                self.logger.info(
+                self.logger.warning(
                     f"Still no UDP datagram after {elapsed:.0f} s — retrying wakeup"
                 )
 
