@@ -196,8 +196,11 @@ class EventHandlers:
                 self.device.initialization_state = True
             
             await self.commands.login_confirm()
-            
             self.device.logged_in = True
+
+            # Persist serial immediately so it survives add-on restarts.
+            if hasattr(self.commands.ble_manager, 'record_serial'):
+                self.commands.ble_manager.record_serial(self.device.info.get('serial'))
             
             await self.commands.get_config_temperature_unit()
             await self.commands.get_config_version()
@@ -219,6 +222,11 @@ class EventHandlers:
                 )
                 self.device.info = {'serial': parsed_data['identifier']}  # sets initialization_state = True
                 self.device.logged_in = True
+
+                # Persist serial immediately so it survives add-on restarts.
+                if hasattr(self.commands.ble_manager, 'record_serial'):
+                    self.commands.ble_manager.record_serial(parsed_data['identifier'])
+
                 await self.commands.heartbeat()
                 await self.commands.set_config_time()
                 await self.commands.get_config_temperature_unit()

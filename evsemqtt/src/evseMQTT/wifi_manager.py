@@ -153,6 +153,14 @@ class WiFiManager:
         except IOError as e:
             self.logger.warning(f"Could not save wallbox serial to cache: {e}")
 
+    def record_serial(self, serial):
+        """Called externally (e.g. from event_handlers) to persist the serial immediately
+        after a successful login or session recovery — ensuring it survives a restart."""
+        if serial and serial != self.last_known_serial:
+            self.last_known_serial = serial
+            self._save_cached_serial(serial)
+            self.logger.info(f"Wallbox serial cached: {serial}")
+
     # ------------------------------------------------------------------
     # Startup / shutdown
     # ------------------------------------------------------------------

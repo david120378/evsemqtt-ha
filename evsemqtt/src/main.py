@@ -72,7 +72,7 @@ class Manager:
             self.logger.info("Waiting for wallbox UDP broadcast ...")
 
             while not self.device.initialization_state:
-                self.logger.info("Device not initialized yet, waiting...")
+                self.logger.debug("Device not initialized yet, waiting...")
                 await asyncio.sleep(1)
 
             self.logger.info(f"Device initialized with serial: {self.device.info['serial']}. Proceeding with login request.")
@@ -82,7 +82,7 @@ class Manager:
                 self.device.info = {'software_version': self.device.info['hardware_version']}
 
             while self.device.info['software_version'] is None:
-                self.logger.info("Waiting for software version...")
+                self.logger.debug("Waiting for software version...")
                 await asyncio.sleep(1)
 
             if self.mqtt_client and not self.mqtt_client.connected and self.device.info['serial'] is not None and self.device.info['software_version'] is not None:
