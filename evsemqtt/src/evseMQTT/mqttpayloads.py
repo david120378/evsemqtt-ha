@@ -411,24 +411,31 @@ class MQTTPayloads:
         if self.device.info['phases'] == 3:
             self.entities.update(self.phase_entities)
 
-    def discovery(self):  
+    def discovery(self):
         discovery_entities = []
-        
+        charge_state_topic = f"evseMQTT/{self.device.info['serial']}/state/charge"
+
         for entity, data in self.entities.items():
-            
+
             if "device_class" in data:
                 device_class = data['device_class']
-            
+
             if "device_type" in data:
                 device_class = data['device_type']
                 data.pop('device_type')
-            
+
             temp_entity = {}
             temp_entity.update(data)
             temp_entity.update({"unique_id": f"{data['unique_id']}_{entity}"})
             temp_entity.update({"config_topic": f"homeassistant/{device_class}/{data['unique_id']}/{entity}/config"})
             temp_entity.update(self.base_device)
-            
+
+            # Entities on the charge state topic receive updates every ~15 s.
+            # expire_after lets HA mark them unavailable automatically when the
+            # wallbox stops sending data — without relying on an "offline" publish.
+            if data.get("state_topic") == charge_state_topic:
+                temp_entity["expire_after"] = 90
+
             discovery_entities.append(temp_entity)
     
         return discovery_entities
