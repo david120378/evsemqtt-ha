@@ -1,79 +1,66 @@
 # Besen Wallbox BS20 — Einbettbare Lovelace-Karte
 #
-# Diese Karte kann direkt in ein bestehendes Dashboard eingefügt werden
-# (Dashboard-Editor → Karte hinzufügen → Manuell → YAML einfügen).
-#
-# Voraussetzung: evseMQTT Add-on läuft und MQTT Discovery ist aktiv.
+# Dashboard-Editor → Karte hinzufügen → Manuell → dieses YAML einfügen
 #
 # Entity-IDs basieren auf dem Serial der Wallbox.
 # Ersetze "wallbox_evse_bs20" durch das tatsächliche Präfix deiner Entitäten
-# (zu finden unter Einstellungen → Geräte & Dienste → MQTT → deine Wallbox).
+# (Einstellungen → Geräte & Dienste → MQTT → deine Wallbox).
 
-type: horizontal-stack
+type: grid
+columns: 2
+square: false
 cards:
 
-  # ── Linke Spalte: Status & Steuerung ──────────────────────────────────────
-  - type: vertical-stack
-    cards:
-      - type: tile
-        entity: switch.wallbox_evse_bs20_charge
-        name: Laden
-        icon: mdi:ev-plug-type2
-        color: green
+  # Spalte links: Status & Steuerung
+  - type: tile
+    entity: switch.wallbox_evse_bs20_charge
+    name: Laden
+    icon: mdi:ev-plug-type2
+    color: green
 
-      - type: horizontal-stack
-        cards:
-          - type: tile
-            entity: sensor.wallbox_evse_bs20_plug_state
-            name: Stecker
-            icon: mdi:power-plug
-          - type: tile
-            entity: sensor.wallbox_evse_bs20_status
-            name: Status
-            icon: mdi:information-outline
+  # Spalte rechts: Ladeleistung
+  - type: gauge
+    entity: sensor.wallbox_evse_bs20_current_energy
+    name: Aktuelle Ladeleistung
+    unit: W
+    min: 0
+    max: 11000
+    needle: true
+    segments:
+      - from: 0
+        color: "#44739e"   # blau  = kein / minimales Laden
+      - from: 1380
+        color: "#e8c439"   # gelb  = einphasig
+      - from: 4600
+        color: "#27ae60"   # grün  = dreiphasig / Vollast
 
-      - type: horizontal-stack
-        cards:
-          - type: tile
-            entity: sensor.wallbox_evse_bs20_error_state
-            name: Fehler
-            icon: mdi:alert-circle-outline
-            color: red
-          - type: tile
-            entity: sensor.wallbox_evse_bs20_message
-            name: Meldung
-            icon: mdi:message-text-outline
+  - type: tile
+    entity: sensor.wallbox_evse_bs20_plug_state
+    name: Stecker
+    icon: mdi:power-plug
 
-  # ── Rechte Spalte: Leistung & Energie ─────────────────────────────────────
-  - type: vertical-stack
-    cards:
-      - type: gauge
-        entity: sensor.wallbox_evse_bs20_current_energy
-        name: Aktuelle Ladeleistung
-        unit: W
-        min: 0
-        max: 11000
-        needle: true
-        segments:
-          - from: 0
-            color: "#44739e"   # blau  = kein / minimales Laden
-          - from: 1380
-            color: "#e8c439"   # gelb  = einphasig
-          - from: 4600
-            color: "#27ae60"   # grün  = dreiphasig / Vollast
+  - type: tile
+    entity: sensor.wallbox_evse_bs20_total_energy
+    name: Gesamtenergie
+    icon: mdi:counter
 
-      - type: horizontal-stack
-        cards:
-          - type: tile
-            entity: sensor.wallbox_evse_bs20_total_energy
-            name: Gesamtenergie
-            icon: mdi:counter
-          - type: tile
-            entity: sensor.wallbox_evse_bs20_temperature
-            name: Innentemperatur
-            icon: mdi:thermometer
+  - type: tile
+    entity: sensor.wallbox_evse_bs20_status
+    name: Status
+    icon: mdi:information-outline
 
-      - type: tile
-        entity: number.wallbox_evse_bs20_charge_amps
-        name: Max. Ladestrom
-        icon: mdi:current-ac
+  - type: tile
+    entity: sensor.wallbox_evse_bs20_temperature
+    name: Innentemperatur
+    icon: mdi:thermometer
+
+  - type: tile
+    entity: sensor.wallbox_evse_bs20_error_state
+    name: Fehler
+    icon: mdi:alert-circle-outline
+    color: red
+
+  - type: tile
+    entity: number.wallbox_evse_bs20_charge_amps
+    name: Max. Ladestrom
+    icon: mdi:current-ac
