@@ -128,6 +128,15 @@ Sobald das Addon läuft und die Wallbox erkannt wurde, erscheint unter
 
 ## Changelog
 
+### v0.1.15 — 2026-04-15
+**Bugfix: Fehlerbehandlung für fehlerhafte/zu kurze Pakete**
+
+Empfängt die Wallbox ein fehlerhaftes oder zu kurzes UDP-Paket (z. B. `system_time`-Paket mit weniger als 5 Bytes), crashte der `system_time`-Parser mit `IndexError: bytearray index out of range`. Die Exception wurde von asyncio still geschluckt (`Task exception was never retrieved`) und tauchte nur im Log auf.
+
+Zwei Fixes:
+- **`parsers.py` – `system_time`**: Explizite Längenprüfung (`len(data) < 5 → return {}`) bevor auf die Bytes zugegriffen wird.
+- **`event_handlers.py` – `handle_notification`**: Zentrales `try/except` um alle Parser-Aufrufe — fängt künftige Parser-Fehler aller Handler ab, loggt sie als `WARNING` mit Cmd-ID und Datenlänge, und bricht den Task sauber ab statt ihn crashen zu lassen.
+
 ### v0.1.6 — 2026-03-23
 **Bugfix: Automatischer Reconnect ohne App-Eingriff**
 
