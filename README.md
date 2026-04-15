@@ -82,31 +82,31 @@ MQTT_PASSWORD: dein_mqtt_passwort
 
 ---
 
-## Dashboard
+## Dashboard-Karte
 
-Im Ordner [`dashboard/`](dashboard/) liegen fertige Lovelace-Konfigurationen:
-
-| Datei | Beschreibung |
-|-------|-------------|
-| [`wallbox_card.yaml`](dashboard/wallbox_card.yaml) | Einzelne `vertical-stack`-Kachel zum Einbetten in ein bestehendes Dashboard |
-| [`wallbox_dashboard.yaml`](dashboard/wallbox_dashboard.yaml) | Vollständiges Dashboard mit `sections`-Layout (modernes HA-Design) |
+Die fertige Lovelace-Karte liegt in [`dashboard/wallbox_card.yaml`](dashboard/wallbox_card.yaml) und kann direkt in ein bestehendes Dashboard eingebettet werden.
 
 ### Vorschau
 
-![Wallbox Dashboard](dashboard/screenshot.png)
+![Wallbox Karte](dashboard/screenshot.png)
 
-### Inhalt der Kachel
+### Inhalt der Karte
 
-- **Status & Steuerung** — Laden ein/aus, Stecker-Status, Fahrzeugstatus, Fehlermeldung, Temperatur
-- **Ladeleistung** — Gauge-Anzeige 0–11 kW mit Farbsegmenten (blau/gelb/grün)
-- **Energie & Steuerung** — Gesamtenergie (Lifetime), Max. Ladestrom (einstellbar)
-- **Phasendaten** — Spannung und Strom für L1, L2, L3
+Die Karte ist zweispaltig aufgebaut:
 
-### Entity-IDs anpassen
+| Linke Spalte | Rechte Spalte |
+|---|---|
+| Laden (Schalter) | Ladeleistung (Gauge 0–11 kW) |
+| Stecker-Status & Fahrzeugstatus | Gesamtenergie & Innentemperatur |
+| Fehler & Meldung | Max. Ladestrom (einstellbar) |
 
-Die YAML-Dateien verwenden `wallbox_evse_bs20` als Präfix. Falls deine Entitäten anders heißen:
-1. Dashboard-YAML öffnen
-2. `wallbox_evse_bs20` global ersetzen durch dein tatsächliches Präfix
+Der Gauge zeigt die Ladeleistung farbkodiert: **blau** = kein Laden, **gelb** = einphasig, **grün** = dreiphasig.
+
+### Einbinden
+
+1. Dashboard-Editor öffnen → **Karte hinzufügen** → **Manuell**
+2. Inhalt von [`dashboard/wallbox_card.yaml`](dashboard/wallbox_card.yaml) einfügen
+3. Falls nötig: `wallbox_evse_bs20` durch das eigene Entity-Präfix ersetzen
    (zu finden unter **Einstellungen → Geräte & Dienste → MQTT → deine Wallbox**)
 
 ---
