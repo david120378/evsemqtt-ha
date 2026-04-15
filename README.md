@@ -82,6 +82,35 @@ MQTT_PASSWORD: dein_mqtt_passwort
 
 ---
 
+## Dashboard
+
+Im Ordner [`dashboard/`](dashboard/) liegen fertige Lovelace-Konfigurationen:
+
+| Datei | Beschreibung |
+|-------|-------------|
+| [`wallbox_card.yaml`](dashboard/wallbox_card.yaml) | Einzelne `vertical-stack`-Kachel zum Einbetten in ein bestehendes Dashboard |
+| [`wallbox_dashboard.yaml`](dashboard/wallbox_dashboard.yaml) | Vollständiges Dashboard mit `sections`-Layout (modernes HA-Design) |
+
+### Vorschau
+
+![Wallbox Dashboard](dashboard/screenshot.png)
+
+### Inhalt der Kachel
+
+- **Status & Steuerung** — Laden ein/aus, Stecker-Status, Fahrzeugstatus, Fehlermeldung, Temperatur
+- **Ladeleistung** — Gauge-Anzeige 0–11 kW mit Farbsegmenten (blau/gelb/grün)
+- **Energie & Steuerung** — Gesamtenergie (Lifetime), Max. Ladestrom (einstellbar)
+- **Phasendaten** — Spannung und Strom für L1, L2, L3
+
+### Entity-IDs anpassen
+
+Die YAML-Dateien verwenden `wallbox_evse_bs20` als Präfix. Falls deine Entitäten anders heißen:
+1. Dashboard-YAML öffnen
+2. `wallbox_evse_bs20` global ersetzen durch dein tatsächliches Präfix
+   (zu finden unter **Einstellungen → Geräte & Dienste → MQTT → deine Wallbox**)
+
+---
+
 ## Home Assistant Integration
 
 Sobald das Addon läuft und die Wallbox erkannt wurde, erscheint unter
