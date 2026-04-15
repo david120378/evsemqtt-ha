@@ -137,6 +137,66 @@ Zwei Fixes:
 - **`parsers.py` – `system_time`**: Explizite Längenprüfung (`len(data) < 5 → return {}`) bevor auf die Bytes zugegriffen wird.
 - **`event_handlers.py` – `handle_notification`**: Zentrales `try/except` um alle Parser-Aufrufe — fängt künftige Parser-Fehler aller Handler ab, loggt sie als `WARNING` mit Cmd-ID und Datenlänge, und bricht den Task sauber ab statt ihn crashen zu lassen.
 
+### v0.1.14 — 2026-03-26
+**Verbesserung: `expire_after` für Lade-Topic-Entitäten**
+
+Entitäten auf dem `state/charge`-Topic erhalten jetzt `expire_after=90`. HA markiert sie automatisch als nicht verfügbar, wenn innerhalb von 90 s keine MQTT-Nachricht eintrifft — also immer dann, wenn die Wallbox ihre UDP-Session verliert — ohne dass das Addon explizit eine „offline"-Availability-Nachricht veröffentlichen muss.
+
+Die Watchdog-Automation kann damit einen einfachen State-Trigger (`to: unavailable, for: 5 min`) nutzen, anstatt das fragile `last_updated`-Template, das alle 5–10 Minuten falsche Neustarts verursacht hat.
+
+### v0.1.13 — 2026-03-24
+**Bugfix: `config_topic` aus MQTT-Discovery-Payload entfernt**
+
+Das interne Feld `config_topic` wurde fälschlicherweise in den Discovery-Payload publiziert. HA 2026.3.4 lehnt Discovery-Payloads mit unbekannten Feldern für strikte Plattformen (switch, number, text, select) ab — betroffene Entitäten wurden nie abonniert und blieben dauerhaft nicht verfügbar. Numerische Sensor-Plattformen waren toleranter, weshalb nur diese funktionierten.
+
+Fix: `config_topic` wird vor dem Publizieren aus dem Discovery-Dict entfernt.
+
+### v0.1.12 — 2026-03-24
+**Bugfix: Seriell-basierter Geräteidentifier wenn MAC nicht verfügbar**
+
+Im WiFi-Modus wird `--address` nicht übergeben, sodass `Device._mac` immer leer ist. Wenn Session Recovery die Login-Beacon-Phase (cmd=1) überspringt, bleibt die echte MAC unbekannt und MQTTPayloads publiziert `identifiers:[""]`. Jeder Neustart erzeugte einen anderen effektiven Identifier und verwaiste HA-Entitäten.
+
+Fix: Fallback auf `identifiers:["evsemqtt_{serial}"]` wenn MAC leer ist. Der Serial ist immer verfügbar (nach dem ersten Connect auf Disk gecacht). BLE-Modus ist nicht betroffen.
+
+### v0.1.11 — 2026-03-24
+**Bugfix: Vollständige Geräteinformationen cachen für stabilen MQTT-Identifier**
+
+Ursache für „Sensoren nicht verfügbar": Im WiFi-Modus sind mac/model/manufacturer/phases/output_max_amps nach Session Recovery via Heartbeat (cmd=3) nie befüllt. MQTTPayloads publiziert dann `identifiers:[""]` — HA erstellt ein anderes Gerät als beim ersten Start und verwaist alle Entitäten.
+
+Fix:
+- **`wifi_manager`**: `/data/last_wallbox_device.json`-Cache für mac, model, manufacturer, phases, output_max_amps; neue Methode `record_device_info()`.
+- **`event_handlers`**: `record_device_info()` nach cmd=1 (Login-Beacon) aufrufen, damit echte MAC und Modell nach dem ersten erfolgreichen Connect persistiert werden.
+- **`main.py`**: Beim Start gecachte Geräteinformationen in das Device-Objekt laden, bevor MQTTPayloads erstellt wird — für stabilen MAC-basierten Identifier auch wenn cmd=1 übersprungen wird.
+
+### v0.1.10 — 2026-03-24
+**Verbesserung: MQTT-Availability online/offline bei Wallbox-Connect/-Disconnect**
+
+Bisher wurde `publish_availability("online")` nur einmal beim initialen Start aufgerufen, und „offline" wurde gar nicht publiziert. Nach einem Wallbox-Reconnect (Session Recovery) oder nach dem Watchdog-Reset von `initialization_state` blieben HA-Entitäten dauerhaft nicht verfügbar.
+
+Die `_run_wifi`-Idle-Schleife verfolgt jetzt `initialization_state` und publiziert „online"/„offline" auf das Availability-Topic, sobald sich der Zustand ändert — HA-Entitäts-Availability bleibt damit synchron zum tatsächlichen Verbindungsstatus.
+
+### v0.1.9 — 2026-03-24
+**Verbesserung: Serial sofort persistieren; Log-Rauschen reduzieren**
+
+- **`wifi_manager`**: Neue öffentliche Methode `record_serial()`, die den Serial sofort in `/data/last_wallbox_serial.txt` speichert — ab dem ersten erfolgreichen Connect verfügbar für LOGIN_REQUEST-Wakeups.
+- **`event_handlers`**: `record_serial()` nach cmd=2 (Login-Bestätigung) und nach cmd=3 (Session Recovery) aufrufen.
+- **`main.py`**: „Device not initialized yet, waiting..." und „Waiting for software version..." von INFO auf DEBUG heruntergestuft, um Log-Rauschen bei normalen Logging-Levels zu reduzieren.
+
+### v0.1.8 — 2026-03-24
+**Verbesserung: Reconnect/Wakeup-Log-Meldungen auf WARNING hochgestuft**
+
+Alle Wakeup- und Reconnect-Meldungen wurden auf INFO-Level geloggt und waren bei `LOGGING_LEVEL=WARNING` (Standard für die meisten Nutzer) unsichtbar. Durch Hochstufung auf WARNING erscheinen sie immer im HA-Addon-Log und Verbindungsprobleme sind sofort erkennbar — ohne den Logging-Level ändern zu müssen.
+
+### v0.1.7 — 2026-03-24
+**Verbesserung: Echten LOGIN_REQUEST als Wakeup senden wenn Wallbox komplett still ist**
+
+Das all-FF-Broadcast-Wakeup-Paket war wirkungslos, wenn die Wallbox komplett aufgehört hatte zu senden (keine Heartbeats, keine Beacons). Die Wallbox-App weckt die Wallbox zuverlässig durch Senden eines richtigen LOGIN_REQUEST mit der echten Seriennummer direkt an die Wallbox-IP.
+
+Änderungen:
+- **`wifi_manager`**: Serial der Wallbox wird in `/data/last_wallbox_serial.txt` gecacht (gleiches Muster wie IP-Cache). Serial wird in `_send_wakeup()` opportunistisch persistiert.
+- **`wifi_manager`**: `_send_wakeup()` sendet jetzt als drittes Paket einen echten LOGIN_REQUEST (cmd=32770) mit `Utils.build_command(serial, password)` an die letzte bekannte IP und den Source-Port. Fällt graceful zurück wenn Serial noch nicht bekannt.
+- **`event_handlers`**: Im cmd=2-Handler (LOGIN_RESPONSE) wird `initialization_state=True` gesetzt wenn Serial bekannt, aber Flag noch False — für den Fall dass die Wallbox via direktem LOGIN_REQUEST geweckt wurde ohne vorherigen Login-Beacon-Flow.
+
 ### v0.1.6 — 2026-03-23
 **Bugfix: Automatischer Reconnect ohne App-Eingriff**
 
@@ -145,6 +205,16 @@ Nach einem HA-Neustart oder einem kurzzeitigen Verbindungsabbruch sendete die Wa
 Zwei Fixes:
 - **Session Recovery via Heartbeat**: Empfängt das Addon einen Heartbeat (cmd=3) ohne initialisiert zu sein, extrahiert es den Serial aus dem Paket-Header, stellt den Geräte-State wieder her (`initialization_state=True`, `logged_in=True`), beantwortet den Heartbeat sofort und fragt die Konfiguration neu ab — ohne den vollen Login-Beacon-Flow.
 - **`software_version` Reset bei Timeout**: Beim Reconnect-Watchdog wurde `software_version` nicht zurückgesetzt, was den Login-Flow nach einem Timeout blockiert hat.
+
+### v0.1.5 — 2026-03-23
+**Bugfix: Wakeup-Paket-Prüfsumme korrigiert + Wallbox-Source-Port versuchen**
+
+Eigentliche Ursache für Reconnect-Fehlschläge: `_WAKEUP_PACKET` hatte Prüfsumme `0x0E14`, korrekt ist aber `0x0E13` (Summe aller vorangehenden Bytes % 0xFFFF = 3603). Die Wallbox hat jeden Wakeup still verworfen, weil die Prüfsummenvalidierung fehlschlug.
+
+Änderungen:
+- Hardcodiertes `_WAKEUP_PACKET` durch `_build_wakeup_packet()` ersetzt, das die Prüfsumme dynamisch berechnet — verhindert diese Klasse von Bugs in Zukunft.
+- `last_known_port` (der ephemere UDP-Source-Port der Wallbox, z. B. 36419) wird beim ersten Connect gespeichert, sodass Wakeup-Pakete auch an diesen Port gesendet werden — nicht nur an `self.port` (28376).
+- `_send_wakeup` versucht jetzt beide Ports × beide Adressen (Broadcast + Unicast), also vier Versuche pro Wakeup-Zyklus.
 
 ### v0.1.4 — 2026-03-13
 **Verbesserung: Robusterer Reconnect-Mechanismus im WiFi-Modus**
@@ -164,11 +234,11 @@ Im WiFi-Modus konnte das Addon abstürzen, wenn ein MQTT-Kommando (z. B. Laden s
 
 Fix: `asyncio.run()` ersetzt durch `asyncio.run_coroutine_threadsafe()`, das Coroutinen thread-sicher in den laufenden Haupt-Event-Loop einreiht. Zusätzlich wird die Queue jetzt innerhalb von `serve()` initialisiert, um sicherzustellen, dass sie immer im richtigen Loop-Kontext erstellt wird.
 
-### v0.1.2 — 2026-02-xx
+### v0.1.2 — 2026-03-06
 Reconnect-Watchdog direkt beim Start von `serve()` aktiviert.
 
-### v0.1.1 — 2026-02-xx
+### v0.1.1 — 2026-03-05
 Wakeup-Broadcast bei Verbindungsabbruch statt Prozess-Neustart.
 
-### v0.1.0 — 2026-01-xx
+### v0.1.0 — 2026-03-01
 Erstes stabiles Release.
