@@ -135,7 +135,11 @@ class EventHandlers:
         
         if cmd in self.handlers:
             handler = self.handlers[cmd]
-            data = handler(parsed_data['data'], parsed_data['identifier'])
+            try:
+                data = handler(parsed_data['data'], parsed_data['identifier'])
+            except Exception as e:
+                self.logger.warning(f"Parser error for cmd {cmd} (data length {len(parsed_data.get('data', b''))}): {e}")
+                return
             self.logger.debug(f"Parsed data\n{data}")
             # Update device info if command 1 is received
             if cmd == 1:

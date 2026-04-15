@@ -181,6 +181,8 @@ class Parsers:
 
     #@staticmethod
     def system_time(data, identifier):
+        if len(data) < 5:
+            return {}
         epoch = Utils.bytes_to_int_little(data[1:5])
         local_time = Utils.bytes_to_timestamp(epoch)
         local_epoch = Utils.bytes_to_timezoned_epoch(epoch)
