@@ -1,6 +1,6 @@
 name: "Besen Wallbox WiFi (UDP)"
 description: "Steuert die Besen BS20 Wallbox via WiFi (UDP) oder BLE und stellt sie Home Assistant per MQTT Discovery zur Verfügung"
-version: "0.1.15"
+version: "0.1.16"
 slug: "evsemqtt"
 url: "https://github.com/david120378/evsemqtt-ha"
 init: false

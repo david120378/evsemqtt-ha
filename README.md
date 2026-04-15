@@ -128,6 +128,11 @@ Sobald das Addon läuft und die Wallbox erkannt wurde, erscheint unter
 
 ## Changelog
 
+### v0.1.16 — 2026-04-15
+**Fix: Addon-URL auf korrektes Repository gesetzt**
+
+Der „Änderungsprotokoll"-Link im HA-Addon-UI verwies auf das falsche Repository (`slespersen/evseMQTT`). URL in `config.yaml` auf `https://github.com/david120378/evsemqtt-ha` korrigiert.
+
 ### v0.1.15 — 2026-04-15
 **Bugfix: Fehlerbehandlung für fehlerhafte/zu kurze Pakete**
 
