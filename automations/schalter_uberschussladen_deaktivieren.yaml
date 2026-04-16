@@ -1,0 +1,39 @@
+# Schalter "Überschussladen" deaktivieren
+#
+# Wird ausgelöst wenn input_boolean.uberschussladen auf "off" gesetzt wird.
+# Setzt den Wallbox-Modus auf "Manuell", deaktiviert alle Überschussladen-
+# Automationen und setzt den Ladestrom auf Maximalstrom (16 A).
+
+alias: "Schalter Überschussladen deaktivieren"
+mode: single
+trigger:
+  - platform: state
+    entity_id: input_boolean.uberschussladen
+    to: "off"
+condition: []
+action:
+  # Modus auf Manuell setzen
+  - action: input_select.select_option
+    target:
+      entity_id: input_select.wallbox_modus
+    data:
+      option: Manuell
+
+  # Ladestrom auf Maximalstrom setzen
+  - action: number.set_value
+    target:
+      entity_id: number.wallbox_evse_bs20_charge_amps
+    data:
+      value: "16"
+
+  # Alle Überschussladen-Automationen deaktivieren
+  - action: automation.turn_off
+    target:
+      entity_id:
+        - automation.wallbox_notfall_laden
+        - automation.wallbox_uberschussladen_starten
+        - automation.wallbox_uberschussladen_stoppen
+        - automation.wallbox_wetter_vorschau_nachtladung
+        - automation.wallbox_uberschussladen_ampere_anpassen
+    data:
+      stop_actions: true

@@ -137,6 +137,8 @@ Im Ordner [`automations/`](automations/) liegen alle Wallbox-Automationen als YA
 | [`wallbox_notfall_laden_mini.yaml`](automations/wallbox_notfall_laden_mini.yaml) | Notfall-Laden Mini Aceman: startet bei SOC unter Schwellwert |
 | [`wallbox_wetter_vorschau_nachtladung.yaml`](automations/wallbox_wetter_vorschau_nachtladung.yaml) | Nächtliches Laden bei schlechter PV-Wettervorhersage |
 | [`wallbox_watchdog.yaml`](automations/wallbox_watchdog.yaml) | Startet evseMQTT Add-on neu bei Verbindungsverlust (>5 min) |
+| [`schalter_uberschussladen_aktivieren.yaml`](automations/schalter_uberschussladen_aktivieren.yaml) | Aktiviert Überschussladen-Modus und alle zugehörigen Automationen |
+| [`schalter_uberschussladen_deaktivieren.yaml`](automations/schalter_uberschussladen_deaktivieren.yaml) | Deaktiviert Überschussladen-Modus und alle zugehörigen Automationen |
 
 Alle Automationen (außer dem Watchdog) basieren auf Blueprints aus dem [pv_automatic_charging](https://github.com/david120378/pv_automatic_charging) Repository.
 
@@ -201,6 +203,11 @@ Sobald das Addon läuft und die Wallbox erkannt wurde, erscheint unter
 ---
 
 ## Changelog
+
+### v0.2.3 — 2026-04-16
+**Dokumentation: Schalter-Automationen für Überschussladen hinzugefügt**
+
+`automations/schalter_uberschussladen_aktivieren.yaml` und `schalter_uberschussladen_deaktivieren.yaml` ergänzt. Aktivieren setzt Modus auf „Überschussladen", startet alle Automationen und setzt Ladestrom auf 6 A. Deaktivieren setzt Modus auf „Manuell", setzt Ladestrom auf 16 A und stoppt alle Automationen.
 
 ### v0.2.2 — 2026-04-16
 **Dokumentation: Helfer (Helpers) als YAML-Referenz hinzugefügt**

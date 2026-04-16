@@ -1,0 +1,42 @@
+# Schalter "Überschussladen" aktivieren
+#
+# Wird ausgelöst wenn input_boolean.uberschussladen auf "on" gesetzt wird.
+# Setzt den Wallbox-Modus auf "Überschussladen", aktiviert alle zugehörigen
+# Automationen und setzt den Ladestrom auf Minimum (6 A) zurück.
+
+alias: "Schalter \"Überschussladen\" aktivieren"
+mode: single
+trigger:
+  - platform: state
+    entity_id: input_boolean.uberschussladen
+    to: "on"
+condition: []
+action:
+  # Modus auf Überschussladen setzen
+  - action: input_select.select_option
+    target:
+      entity_id: input_select.wallbox_modus
+    data:
+      option: Überschussladen
+
+  # Alle Überschussladen-Automationen aktivieren
+  - action: automation.turn_on
+    target:
+      entity_id:
+        - automation.wallbox_notfall_laden
+        - automation.wallbox_uberschussladen_starten
+        - automation.wallbox_uberschussladen_stoppen
+        - automation.wallbox_wetter_vorschau_nachtladung
+        - automation.wallbox_uberschussladen_ampere_anpassen
+
+  # Laden zunächst stoppen — Überschussladen-Automation startet bei Bedarf
+  - action: switch.turn_off
+    target:
+      entity_id: switch.wallbox_evse_bs20_charge
+
+  # Ladestrom auf Minimum zurücksetzen
+  - action: number.set_value
+    target:
+      entity_id: number.wallbox_evse_bs20_charge_amps
+    data:
+      value: "6"
