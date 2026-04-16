@@ -67,3 +67,10 @@ cards:
     features:
       - type: numeric-input
         style: slider
+
+  - type: tile
+    entity: input_select.wallbox_modus
+    name: Lademodus
+    icon: mdi:ev-station
+    features:
+      - type: select-options
