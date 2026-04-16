@@ -1,6 +1,8 @@
-# Besen Wallbox BS20 — Einbettbare Lovelace-Karte
+# Besen Wallbox BS20 — Einbettbare Lovelace-Karte (Bubble Card)
 #
 # Dashboard-Editor → Karte hinzufügen → Manuell → dieses YAML einfügen
+#
+# Voraussetzung: Bubble Card via HACS installiert (Clooos/Bubble-Card)
 #
 # Entity-IDs basieren auf dem Serial der Wallbox.
 # Ersetze "wallbox_evse_bs20" durch das tatsächliche Präfix deiner Entitäten
@@ -11,81 +13,44 @@ columns: 2
 square: false
 cards:
 
-  - type: tile
+  # Laden — Schalter
+  - type: custom:bubble-card
+    card_type: button
     entity: switch.wallbox_evse_bs20_charge
     name: Laden
     icon: mdi:ev-plug-type2
-    color: green
 
-  - type: gauge
+  # Aktuelle Ladeleistung
+  - type: custom:bubble-card
+    card_type: button
     entity: sensor.wallbox_evse_bs20_current_energy
-    name: Aktuelle Ladeleistung
-    unit: W
-    min: 0
-    max: 11000
-    needle: true
-    segments:
-      - from: 0
-        color: "#44739e"   # blau  = kein / minimales Laden
-      - from: 1380
-        color: "#e8c439"   # gelb  = einphasig
-      - from: 4600
-        color: "#27ae60"   # grün  = dreiphasig / Vollast
+    name: Ladeleistung
+    icon: mdi:lightning-bolt
 
-  - type: tile
+  # Stecker-Status
+  - type: custom:bubble-card
+    card_type: button
     entity: sensor.wallbox_evse_bs20_plug_state
     name: Stecker
     icon: mdi:power-plug
 
-  - type: tile
+  # Fehlerstatus
+  - type: custom:bubble-card
+    card_type: button
     entity: sensor.wallbox_evse_bs20_error_state
     name: Fehler
     icon: mdi:alert-circle-outline
-    color: red
 
-  - type: tile
+  # Max. Ladestrom — Bubble Card zeigt Slider automatisch für number-Entitäten
+  - type: custom:bubble-card
+    card_type: button
     entity: number.wallbox_evse_bs20_charge_amps
     name: Max. Ladestrom
     icon: mdi:current-ac
-    features:
-      - type: numeric-input
-        style: slider
 
-  - type: custom:mushroom-chips-card
-    chips:
-      - type: template
-        content: Off
-        icon: mdi:power-off
-        icon_color: >
-          {{ 'red' if is_state('input_select.wallbox_modus', 'Off') else 'grey' }}
-        tap_action:
-          action: call-service
-          service: input_select.select_option
-          target:
-            entity_id: input_select.wallbox_modus
-          data:
-            option: Off
-      - type: template
-        content: Manuell
-        icon: mdi:hand-back-right
-        icon_color: >
-          {{ 'blue' if is_state('input_select.wallbox_modus', 'Manuell') else 'grey' }}
-        tap_action:
-          action: call-service
-          service: input_select.select_option
-          target:
-            entity_id: input_select.wallbox_modus
-          data:
-            option: Manuell
-      - type: template
-        content: Überschuss
-        icon: mdi:solar-power
-        icon_color: >
-          {{ 'green' if is_state('input_select.wallbox_modus', 'Überschussladen') else 'grey' }}
-        tap_action:
-          action: call-service
-          service: input_select.select_option
-          target:
-            entity_id: input_select.wallbox_modus
-          data:
-            option: Überschussladen
+  # Lademodus — Tippen öffnet nativen HA-Select-Dialog
+  - type: custom:bubble-card
+    card_type: button
+    entity: input_select.wallbox_modus
+    name: Lademodus
+    icon: mdi:ev-station
