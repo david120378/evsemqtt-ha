@@ -82,25 +82,34 @@ MQTT_PASSWORD: dein_mqtt_passwort
 
 ---
 
-## Dashboard-Karte
+## Dashboard-Karte *(optional)*
 
-Die fertige Lovelace-Karte liegt in [`dashboard/wallbox_card.yaml`](dashboard/wallbox_card.yaml) und kann direkt in ein bestehendes Dashboard eingebettet werden.
+> **Hinweis:** Die Dashboard-Karte ist vollständig optional und nicht Teil des Addons selbst. Sie dient als fertige Vorlage für alle die schnell eine übersichtliche Wallbox-Ansicht in Home Assistant einrichten möchten.
+
+Die fertige Lovelace-Karte liegt in [`dashboard/wallbox_card.yaml`](dashboard/wallbox_card.yaml) und kann in jedes beliebige bestehende Dashboard eingebettet werden — es wird kein separates Dashboard benötigt.
 
 ### Vorschau
 
 ![Wallbox Karte](dashboard/screenshot.png)
 
-### Inhalt der Karte
+### Aufbau der Karte
 
-Die Karte ist zweispaltig aufgebaut:
+Die Karte ist einspaltig aufgebaut und von oben nach unten gegliedert:
 
-| Linke Spalte | Rechte Spalte |
-|---|---|
-| Laden (Schalter) | Ladeleistung (Gauge 0–11 kW) |
-| Stecker-Status & Fahrzeugstatus | Gesamtenergie & Innentemperatur |
-| Fehler & Meldung | Max. Ladestrom (einstellbar) |
+| Bereich | Inhalt |
+|---------|--------|
+| **Steuer-Chips** | Drei anklickbare Chips: `Manuell` (blau wenn aktiv), `Überschuss` (grün wenn aktiv), `Laden An/Aus` (grün/rot) |
+| **Fahrzeug-Karte** | Zeigt **Tesla** oder **Mini Aceman** mit Bild und Ladestand — nur sichtbar wenn das jeweilige Fahrzeug angeschlossen ist (conditional) |
+| **Ladeleistung** | Gauge 0–11 kW, farbkodiert: **blau** = kein Laden, **gelb** = einphasig (~1,4 kW), **grün** = dreiphasig (>4,6 kW) |
+| **Max. Ladestrom** | Tile mit integriertem Schieberegler (6 A – max. Wallbox-Kapazität) |
+| **SOC Schwellwert Start** | Schieberegler für den SOC ab dem Notfall-Laden startet |
+| **SOC Schwellwert Stopp** | Schieberegler für den SOC bei dem Notfall-Laden stoppt |
 
-Der Gauge zeigt die Ladeleistung farbkodiert: **blau** = kein Laden, **gelb** = einphasig, **grün** = dreiphasig.
+### Voraussetzungen
+
+- [Mushroom Cards](https://github.com/piitaya/lovelace-mushroom) via HACS installiert
+- Die Wallbox-Entitäten müssen über MQTT Discovery in HA verfügbar sein
+- Fahrzeugbilder unter `/config/www/pictures/Tesla.png` und `/config/www/pictures/Aceman.png` (optional, nur für Fahrzeug-Karten)
 
 ### Einbinden
 
@@ -108,6 +117,7 @@ Der Gauge zeigt die Ladeleistung farbkodiert: **blau** = kein Laden, **gelb** = 
 2. Inhalt von [`dashboard/wallbox_card.yaml`](dashboard/wallbox_card.yaml) einfügen
 3. Falls nötig: `wallbox_evse_bs20` durch das eigene Entity-Präfix ersetzen
    (zu finden unter **Einstellungen → Geräte & Dienste → MQTT → deine Wallbox**)
+4. Fahrzeug-spezifische Entity-IDs (`binary_sensor.flash_charger`, `sensor.flash_battery` etc.) durch eigene ersetzen oder die entsprechenden `conditional`-Blöcke entfernen
 
 ---
 
@@ -156,6 +166,11 @@ Sobald das Addon läuft und die Wallbox erkannt wurde, erscheint unter
 ---
 
 ## Changelog
+
+### v0.1.17 — 2026-04-16
+**Dokumentation: Dashboard-Karte beschrieben**
+
+Optionale Lovelace-Karte (`dashboard/wallbox_card.yaml`) mit Aufbau-Dokumentation, Voraussetzungen und Einbinde-Anleitung im README ergänzt. Screenshot aktualisiert.
 
 ### v0.1.16 — 2026-04-15
 **Fix: Addon-URL auf korrektes Repository gesetzt**
