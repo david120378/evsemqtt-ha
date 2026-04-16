@@ -11,14 +11,12 @@ columns: 2
 square: false
 cards:
 
-  # Spalte links: Status & Steuerung
   - type: tile
     entity: switch.wallbox_evse_bs20_charge
     name: Laden
     icon: mdi:ev-plug-type2
     color: green
 
-  # Spalte rechts: Ladeleistung
   - type: gauge
     entity: sensor.wallbox_evse_bs20_current_energy
     name: Aktuelle Ladeleistung
@@ -38,21 +36,6 @@ cards:
     entity: sensor.wallbox_evse_bs20_plug_state
     name: Stecker
     icon: mdi:power-plug
-
-  - type: tile
-    entity: sensor.wallbox_evse_bs20_total_energy
-    name: Gesamtenergie
-    icon: mdi:counter
-
-  - type: tile
-    entity: sensor.wallbox_evse_bs20_status
-    name: Status
-    icon: mdi:information-outline
-
-  - type: tile
-    entity: sensor.wallbox_evse_bs20_temperature
-    name: Innentemperatur
-    icon: mdi:thermometer
 
   - type: tile
     entity: sensor.wallbox_evse_bs20_error_state
