@@ -51,9 +51,8 @@ cards:
       - type: numeric-input
         style: slider
 
-  - type: tile
+  - type: custom:mushroom-select-card
     entity: input_select.wallbox_modus
     name: Lademodus
     icon: mdi:ev-station
-    features:
-      - type: select-options
+    show_buttons_control: true
