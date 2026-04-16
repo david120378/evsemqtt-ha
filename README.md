@@ -167,10 +167,12 @@ Sobald das Addon läuft und die Wallbox erkannt wurde, erscheint unter
 
 ## Changelog
 
-### v0.1.17 — 2026-04-16
-**Dokumentation: Dashboard-Karte beschrieben**
+### v0.2.0 — 2026-04-16
+**Neu: Optionale Dashboard-Karte**
 
-Optionale Lovelace-Karte (`dashboard/wallbox_card.yaml`) mit Aufbau-Dokumentation, Voraussetzungen und Einbinde-Anleitung im README ergänzt. Screenshot aktualisiert.
+Optionale Lovelace-Karte (`dashboard/wallbox_card.yaml`) als fertige Vorlage für Home Assistant hinzugefügt. Einbindbar in jedes beliebige bestehende Dashboard — kein separates Dashboard nötig.
+
+Inhalt der Karte: Steuer-Chips (Manuell / Überschuss / Laden), bedingte Fahrzeug-Karten (Tesla / Mini Aceman), Ladeleistungs-Gauge, Schieberegler für Max. Ladestrom und SOC-Schwellwerte. README mit vollständiger Aufbau-Dokumentation, Voraussetzungen und Einbinde-Anleitung ergänzt.
 
 ### v0.1.16 — 2026-04-15
 **Fix: Addon-URL auf korrektes Repository gesetzt**
