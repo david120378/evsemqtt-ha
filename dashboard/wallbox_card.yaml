@@ -64,3 +64,6 @@ cards:
     entity: number.wallbox_evse_bs20_charge_amps
     name: Max. Ladestrom
     icon: mdi:current-ac
+    features:
+      - type: numeric-input
+        style: slider
