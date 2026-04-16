@@ -51,8 +51,41 @@ cards:
       - type: numeric-input
         style: slider
 
-  - type: custom:mushroom-select-card
-    entity: input_select.wallbox_modus
-    name: Lademodus
-    icon: mdi:ev-station
-    show_buttons_control: true
+  - type: custom:mushroom-chips-card
+    chips:
+      - type: template
+        content: Off
+        icon: mdi:power-off
+        icon_color: >
+          {{ 'red' if is_state('input_select.wallbox_modus', 'Off') else 'grey' }}
+        tap_action:
+          action: call-service
+          service: input_select.select_option
+          target:
+            entity_id: input_select.wallbox_modus
+          data:
+            option: Off
+      - type: template
+        content: Manuell
+        icon: mdi:hand-back-right
+        icon_color: >
+          {{ 'blue' if is_state('input_select.wallbox_modus', 'Manuell') else 'grey' }}
+        tap_action:
+          action: call-service
+          service: input_select.select_option
+          target:
+            entity_id: input_select.wallbox_modus
+          data:
+            option: Manuell
+      - type: template
+        content: Überschuss
+        icon: mdi:solar-power
+        icon_color: >
+          {{ 'green' if is_state('input_select.wallbox_modus', 'Überschussladen') else 'grey' }}
+        tap_action:
+          action: call-service
+          service: input_select.select_option
+          target:
+            entity_id: input_select.wallbox_modus
+          data:
+            option: Überschussladen
