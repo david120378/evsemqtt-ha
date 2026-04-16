@@ -109,7 +109,12 @@ Die Karte ist einspaltig aufgebaut und von oben nach unten gegliedert:
 
 - [Mushroom Cards](https://github.com/piitaya/lovelace-mushroom) via HACS installiert
 - Die Wallbox-Entitäten müssen über MQTT Discovery in HA verfügbar sein
-- Fahrzeugbilder unter `/config/www/pictures/Tesla.png` und `/config/www/pictures/Aceman.png` (optional, nur für Fahrzeug-Karten)
+- **Fahrzeugbilder** (optional, nur für die bedingten Fahrzeug-Karten):
+  - `/config/www/pictures/Tesla.png` — Bild des Tesla
+  - `/config/www/pictures/Aceman.png` — Bild des Mini Aceman
+  - Der Ordner `www/pictures/` muss im HA-Konfigurationsverzeichnis angelegt werden
+  - Bilder sind über `/local/pictures/Dateiname.png` in Lovelace erreichbar
+  - Ohne Bilder einfach die `conditional`-Blöcke für Tesla und Aceman entfernen
 
 ### Einbinden
 
@@ -141,6 +146,8 @@ Im Ordner [`automations/`](automations/) liegen alle Wallbox-Automationen als YA
 | [`schalter_uberschussladen_deaktivieren.yaml`](automations/schalter_uberschussladen_deaktivieren.yaml) | Deaktiviert Überschussladen-Modus und alle zugehörigen Automationen |
 
 Alle Automationen (außer dem Watchdog) basieren auf Blueprints aus dem [pv_automatic_charging](https://github.com/david120378/pv_automatic_charging) Repository.
+
+> **Hinweis Watchdog:** Der Addon-Slug (`b043d8c5_evsemqtt`) in `wallbox_watchdog.yaml` ist instanzspezifisch. Den eigenen Slug findest du unter **Einstellungen → Addons → Besen Wallbox WiFi (UDP) → Info**.
 
 ### Helfer
 
@@ -203,6 +210,13 @@ Sobald das Addon läuft und die Wallbox erkannt wurde, erscheint unter
 ---
 
 ## Changelog
+
+### v0.2.4 — 2026-04-16
+**Bugfix & Dokumentation: Abhängigkeiten vervollständigt**
+
+- `schalter_uberschussladen_aktivieren/deaktivieren`: `wallbox_notfall_laden_mini` ergänzt (fehlte bisher)
+- `wallbox_watchdog`: Hinweis auf instanzspezifischen Addon-Slug dokumentiert
+- README: Anleitung für Fahrzeugbilder (`/config/www/pictures/`) und Watchdog-Slug ergänzt
 
 ### v0.2.3 — 2026-04-16
 **Dokumentation: Schalter-Automationen für Überschussladen hinzugefügt**

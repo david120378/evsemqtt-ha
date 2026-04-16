@@ -20,5 +20,10 @@ trigger:
 condition: []
 action:
   - data:
+      # ACHTUNG: Der Addon-Slug ist instanzspezifisch!
+      # Den eigenen Slug finden unter:
+      # Einstellungen → Addons → Besen Wallbox WiFi (UDP) → Info → Slug
+      # Oder in der HA-URL wenn das Addon geöffnet ist:
+      # /hassio/addon/DEIN_SLUG/info
       addon: b043d8c5_evsemqtt
     action: hassio.addon_restart
