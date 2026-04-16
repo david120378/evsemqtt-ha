@@ -1,0 +1,92 @@
+# Wallbox – Helfer (Helpers)
+#
+# Diese Helfer müssen in Home Assistant angelegt sein damit die Wallbox-
+# Automationen und die Dashboard-Karte funktionieren.
+#
+# Anlegen über: Einstellungen → Geräte & Dienste → Helfer → + Helfer erstellen
+# Oder die entsprechenden Abschnitte in configuration.yaml einfügen.
+
+# ── input_boolean ────────────────────────────────────────────────────────────
+
+input_boolean:
+
+  uberschussladen:
+    name: Überschussladen
+    icon: mdi:solar-power
+    # Interner Zustandsschalter für das Überschussladen.
+    # Wird von den Überschussladen-Automationen gesetzt/gelöscht.
+
+  wallbox_nacht_laden:
+    name: Wallbox Nacht Laden
+    icon: mdi:weather-night
+    # Aktiviert die nächtliche Ladelogik (Wetter-Vorschau-Automation).
+    # Manuell im Dashboard oder automatisch durch Wetter-Automation gesetzt.
+
+# ── input_select ─────────────────────────────────────────────────────────────
+
+input_select:
+
+  wallbox_modus:
+    name: Wallbox Modus
+    icon: mdi:ev-station
+    options:
+      - Off
+      - Manuell
+      - Überschussladen
+    initial: Off
+    # Zentraler Modus-Selektor für alle Wallbox-Automationen.
+    # Off         → Laden gestoppt
+    # Manuell     → Laden mit festem Strom (manual_charge_amps)
+    # Überschussladen → PV-gesteuertes Laden
+
+# ── input_number ─────────────────────────────────────────────────────────────
+
+input_number:
+
+  wallbox_soc_schwellwert:
+    name: Wallbox SOC Schwellwert
+    icon: mdi:battery-charging
+    min: 5
+    max: 100
+    step: 5
+    unit_of_measurement: "%"
+    mode: slider
+    initial: 80
+    # SOC-Schwellwert der Hausbatterie ab dem Überschussladen starten darf.
+    # Verhindert dass die Wallbox die Hausbatterie leer zieht.
+
+  wallbox_soc_schwellwert_stopp:
+    name: "Wallbox SOC Schwellwert – Stopp"
+    icon: mdi:battery-minus
+    min: 5
+    max: 100
+    step: 5
+    unit_of_measurement: "%"
+    mode: slider
+    initial: 60
+    # SOC-Schwellwert der Hausbatterie bei dem Überschussladen gestoppt wird.
+    # Sollte kleiner als wallbox_soc_schwellwert sein.
+
+  wallbox_puffer_watt:
+    name: Wallbox Puffer Watt
+    icon: mdi:sine-wave
+    min: 0
+    max: 1000
+    step: 50
+    unit_of_measurement: W
+    mode: slider
+    initial: 0
+    # Puffer in Watt der beim Überschussladen zusätzlich vorhanden sein muss
+    # bevor geladen wird. Verhindert ständiges Ein-/Ausschalten bei knappem Überschuss.
+
+  wallbox_nacht_ziel_soc:
+    name: Wallbox Nacht Ziel SOC
+    icon: mdi:weather-night
+    min: 0
+    max: 100
+    step: 5
+    unit_of_measurement: "%"
+    mode: slider
+    initial: 0
+    # Ziel-SOC für die nächtliche Ladelogik.
+    # Laden stoppt automatisch wenn dieser SOC erreicht ist.

@@ -140,6 +140,20 @@ Im Ordner [`automations/`](automations/) liegen alle Wallbox-Automationen als YA
 
 Alle Automationen (außer dem Watchdog) basieren auf Blueprints aus dem [pv_automatic_charging](https://github.com/david120378/pv_automatic_charging) Repository.
 
+### Helfer
+
+Die benötigten Helfer sind in [`automations/helpers.yaml`](automations/helpers.yaml) dokumentiert:
+
+| Helper | Typ | Beschreibung |
+|--------|-----|-------------|
+| `input_boolean.uberschussladen` | Schalter | Interner Zustandsschalter für das Überschussladen |
+| `input_boolean.wallbox_nacht_laden` | Schalter | Aktiviert die nächtliche Ladelogik |
+| `input_select.wallbox_modus` | Auswahl | Lademodus: Off / Manuell / Überschussladen |
+| `input_number.wallbox_soc_schwellwert` | Schieberegler | SOC-Schwellwert Hausbatterie für Start (Standard: 80 %) |
+| `input_number.wallbox_soc_schwellwert_stopp` | Schieberegler | SOC-Schwellwert Hausbatterie für Stopp (Standard: 60 %) |
+| `input_number.wallbox_puffer_watt` | Schieberegler | Puffer-Watt vor dem Ladestart (Standard: 0 W) |
+| `input_number.wallbox_nacht_ziel_soc` | Schieberegler | Ziel-SOC für Nachtladung |
+
 ---
 
 ## Home Assistant Integration
@@ -187,6 +201,11 @@ Sobald das Addon läuft und die Wallbox erkannt wurde, erscheint unter
 ---
 
 ## Changelog
+
+### v0.2.2 — 2026-04-16
+**Dokumentation: Helfer (Helpers) als YAML-Referenz hinzugefügt**
+
+`automations/helpers.yaml` mit allen benötigten Helfern (input_boolean, input_select, input_number) dokumentiert. README um Helfer-Tabelle ergänzt.
 
 ### v0.2.1 — 2026-04-16
 **Dokumentation: Automationen als YAML-Referenz hinzugefügt**
