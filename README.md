@@ -121,6 +121,27 @@ Die Karte ist einspaltig aufgebaut und von oben nach unten gegliedert:
 
 ---
 
+## Automationen *(optional)*
+
+> **Hinweis:** Die Automationen sind vollständig optional und auf das persönliche Setup abgestimmt (FoxESS Wechselrichter, Tesla, Mini Aceman). Entity-IDs müssen an das eigene System angepasst werden.
+
+Im Ordner [`automations/`](automations/) liegen alle Wallbox-Automationen als YAML-Referenz:
+
+| Datei | Beschreibung |
+|-------|-------------|
+| [`wallbox_lademodus_off_manuell.yaml`](automations/wallbox_lademodus_off_manuell.yaml) | Schaltet Wallbox bei Modus „Off" aus, bei „Manuell" ein |
+| [`wallbox_uberschussladen_starten.yaml`](automations/wallbox_uberschussladen_starten.yaml) | Startet Laden bei ausreichend PV-Überschuss |
+| [`wallbox_uberschussladen_stoppen.yaml`](automations/wallbox_uberschussladen_stoppen.yaml) | Stoppt Laden wenn Überschuss oder SOC-Ziel nicht mehr erreicht |
+| [`wallbox_uberschussladen_ampere_anpassen.yaml`](automations/wallbox_uberschussladen_ampere_anpassen.yaml) | Passt Ladestrom dynamisch an verfügbaren PV-Überschuss an |
+| [`wallbox_notfall_laden_tesla.yaml`](automations/wallbox_notfall_laden_tesla.yaml) | Notfall-Laden Tesla: startet bei SOC unter Schwellwert |
+| [`wallbox_notfall_laden_mini.yaml`](automations/wallbox_notfall_laden_mini.yaml) | Notfall-Laden Mini Aceman: startet bei SOC unter Schwellwert |
+| [`wallbox_wetter_vorschau_nachtladung.yaml`](automations/wallbox_wetter_vorschau_nachtladung.yaml) | Nächtliches Laden bei schlechter PV-Wettervorhersage |
+| [`wallbox_watchdog.yaml`](automations/wallbox_watchdog.yaml) | Startet evseMQTT Add-on neu bei Verbindungsverlust (>5 min) |
+
+Alle Automationen (außer dem Watchdog) basieren auf Blueprints aus dem [pv_automatic_charging](https://github.com/david120378/pv_automatic_charging) Repository.
+
+---
+
 ## Home Assistant Integration
 
 Sobald das Addon läuft und die Wallbox erkannt wurde, erscheint unter
@@ -166,6 +187,11 @@ Sobald das Addon läuft und die Wallbox erkannt wurde, erscheint unter
 ---
 
 ## Changelog
+
+### v0.2.1 — 2026-04-16
+**Dokumentation: Automationen als YAML-Referenz hinzugefügt**
+
+Alle 8 Wallbox-Automationen im Ordner `automations/` als kommentierte YAML-Dateien dokumentiert: Lademodus-Steuerung, Überschussladen (Start/Stopp/Ampere), Notfall-Laden (Tesla/Mini), Wetter-Nachtladung und Watchdog. README um Automationen-Sektion erweitert.
 
 ### v0.2.0 — 2026-04-16
 **Neu: Optionale Dashboard-Karte**

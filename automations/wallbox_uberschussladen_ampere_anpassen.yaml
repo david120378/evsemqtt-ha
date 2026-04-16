@@ -1,0 +1,16 @@
+# Wallbox: Überschussladen – Ampere anpassen
+#
+# Passt den Ladestrom dynamisch an den verfügbaren PV-Überschuss an.
+# Basiert auf dem Blueprint: david120378/wallbox_surplus_amps.yaml
+
+alias: "Wallbox: Überschussladen – Ampere anpassen"
+use_blueprint:
+  path: david120378/wallbox_surplus_amps.yaml
+  input:
+    mode_selector: input_select.wallbox_modus
+    wallbox_switch: switch.wallbox_evse_bs20_charge
+    wallbox_charge_amps: number.wallbox_evse_bs20_charge_amps
+    feedin_sensor: sensor.foxess_feedin_power       # Einspeiseleistung in kW
+    current_energy_sensor: sensor.wallbox_evse_bs20_current_energy
+    grid_sensor: sensor.foxess_grid_consumption_power
+    phases: "3"

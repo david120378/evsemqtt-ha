@@ -1,0 +1,18 @@
+# Wallbox: Wetter-Vorschau – Nachtladung
+#
+# Startet nächtliches Laden wenn die Wettervorhersage für den nächsten Tag
+# schlechte PV-Produktion erwarten lässt und der SOC unter dem Zielwert liegt.
+# Basiert auf dem Blueprint: david120378/wallbox_wetter.yaml
+
+alias: "Wallbox: Wetter-Vorschau – Nachtladung"
+use_blueprint:
+  path: david120378/wallbox_wetter.yaml
+  input:
+    weather_entity: weather.forecast_home
+    night_start: "00:00:00"
+    wallbox_switch: switch.wallbox_evse_bs20_charge
+    wallbox_charge_amps: number.wallbox_evse_bs20_charge_amps
+    nacht_laden_flag: input_boolean.wallbox_nacht_laden
+    nacht_ziel_soc_helper: input_number.wallbox_nacht_ziel_soc
+    car_soc_sensor: sensor.flash_battery
+    night_charge_amps: 16

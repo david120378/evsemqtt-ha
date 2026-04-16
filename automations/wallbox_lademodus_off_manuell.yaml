@@ -1,0 +1,16 @@
+# Wallbox: Lademodus-Steuerung (Off / Manuell)
+#
+# Steuert die Wallbox basierend auf dem gewählten Modus (Off oder Manuell).
+# Basiert auf dem Blueprint: david120378/wallbox_modus.yaml
+#
+# Einbinden: Einstellungen → Automationen → + Automation erstellen → Blueprint
+# Oder diese Datei als Referenz für eine manuelle Automation nutzen.
+
+alias: "Wallbox: Lademodus-Steuerung (Off / Manuell)"
+use_blueprint:
+  path: david120378/wallbox_modus.yaml
+  input:
+    mode_selector: input_select.wallbox_modus
+    wallbox_switch: switch.wallbox_evse_bs20_charge
+    wallbox_charge_amps: number.wallbox_evse_bs20_charge_amps
+    manual_charge_amps: 16

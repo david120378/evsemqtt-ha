@@ -1,0 +1,24 @@
+# Wallbox Watchdog – Add-on Neustart bei Verbindungsverlust
+#
+# Startet das evseMQTT Add-on automatisch neu wenn die Besen Wallbox
+# länger als 5 Minuten unavailable ist.
+# (expire_after=90s in MQTT Discovery markiert Entitäten nach 90s ohne
+# Datagramm als unavailable — dieser Watchdog reagiert dann nach weiteren 5 min.)
+
+alias: "Wallbox Watchdog – Add-on Neustart bei Verbindungsverlust"
+description: >
+  Startet das evseMQTT Add-on automatisch neu wenn die Besen Wallbox länger
+  als 5 Minuten unavailable ist (expire_after in MQTT Discovery löst das
+  nach 90 s ohne Datagramm aus).
+mode: single
+trigger:
+  - platform: state
+    entity_id: sensor.wallbox_evse_bs20_status
+    to: unavailable
+    for:
+      minutes: 5
+condition: []
+action:
+  - data:
+      addon: b043d8c5_evsemqtt
+    action: hassio.addon_restart

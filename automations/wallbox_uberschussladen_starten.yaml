@@ -1,0 +1,24 @@
+# Wallbox: Überschussladen – Starten
+#
+# Startet das Laden automatisch wenn genügend PV-Überschuss vorhanden ist
+# und der Batterie-SOC über dem Schwellwert liegt.
+# Basiert auf dem Blueprint: david120378/wallbox_surplus_start.yaml
+
+alias: "Wallbox: Überschussladen – Starten"
+use_blueprint:
+  path: david120378/wallbox_surplus_start.yaml
+  input:
+    mode_selector: input_select.wallbox_modus
+    wallbox_switch: switch.wallbox_evse_bs20_charge
+    wallbox_charge_amps: number.wallbox_evse_bs20_charge_amps
+    feedin_sensor: sensor.foxess_feedin_power       # Einspeiseleistung in kW
+    soc_sensor: sensor.foxess_bat_soc               # Batterieladezustand
+    soc_threshold_helper: input_number.wallbox_soc_schwellwert
+    start_threshold_watts: 400
+    zeitfenster_aktiv: true
+    phases: "3"
+    start_delay:
+      hours: 0
+      minutes: 0
+      seconds: 5
+    sensor_in_kw: true

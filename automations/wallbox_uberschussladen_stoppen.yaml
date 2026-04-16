@@ -1,0 +1,19 @@
+# Wallbox: Überschussladen – Stoppen
+#
+# Stoppt das Laden wenn der PV-Überschuss unter den Schwellwert fällt
+# oder der Fahrzeug-SOC das Maximum erreicht hat.
+# Basiert auf dem Blueprint: david120378/wallbox_surplus_stop.yaml
+
+alias: "Wallbox: Überschussladen – Stoppen"
+use_blueprint:
+  path: david120378/wallbox_surplus_stop.yaml
+  input:
+    mode_selector: input_select.wallbox_modus
+    wallbox_switch: switch.wallbox_evse_bs20_charge
+    feedin_sensor: sensor.foxess_feedin_power       # Einspeiseleistung in kW
+    soc_sensor: sensor.foxess_bat_soc               # Batterieladezustand
+    soc_threshold_helper: input_number.wallbox_soc_schwellwert_stopp
+    car_soc_sensor: sensor.flash_battery            # Fahrzeug-SOC (Tesla)
+    car_soc_max: 100
+    stop_threshold_watts: 400
+    sensor_in_kw: true
