@@ -90,16 +90,18 @@ cards:
   - type: custom:mushroom-chips-card
     alignment: center
     card_mod:
-      style: |
-        ha-card .chip {
-          --chip-height: 60px;
-        }
-        ha-card img {
-          width: 54px !important;
-          height: 54px !important;
-          border-radius: 50%;
-          object-fit: cover;
-        }
+      style:
+        mushroom-chips-card$: |
+          mushroom-template-chip {
+            --chip-height: 60px;
+          }
+        mushroom-chips-card$ mushroom-template-chip$: |
+          img {
+            width: 52px !important;
+            height: 52px !important;
+            border-radius: 50%;
+            object-fit: cover;
+          }
     chips:
       - type: conditional
         conditions:
