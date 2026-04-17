@@ -211,6 +211,11 @@ Sobald das Addon läuft und die Wallbox erkannt wurde, erscheint unter
 
 ## Changelog
 
+### v0.2.6 — 2026-04-17
+**Bugfix: Wartezeit nach charge_stop erhöht**
+
+- `mqttcallback.py`: Sleep nach `set_charge_stop` von 1 s auf 3 s erhöht. Die Wallbox ignorierte den darauffolgenden `set_charge_start`-Befehl, weil 1 Sekunde nicht ausreichte, um wieder in den Zustand „Ready to charge" zurückzukehren.
+
 ### v0.2.5 — 2026-04-17
 **Bugfix: Ladestromänderung während aktiver Ladesession**
 
