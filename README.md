@@ -211,6 +211,11 @@ Sobald das Addon läuft und die Wallbox erkannt wurde, erscheint unter
 
 ## Changelog
 
+### v0.2.8 — 2026-04-17
+**Bugfix: Warte auf output_state == "Idle" vor charge_start**
+
+- `mqttcallback.py`: Polling wartet jetzt explizit auf `output_state == "Idle"` statt auf „nicht Charging". In-flight Statuspakete liefern kurz nach dem Stop bereits einen Non-Charging-Zustand, obwohl die Wallbox intern noch nicht bereit ist — `"Idle"` ist der korrekte Signal-Zustand. Polling max. 20 s, alle 500 ms.
+
 ### v0.2.7 — 2026-04-17
 **Bugfix: Zuverlässiger Neustart nach charge_stop**
 

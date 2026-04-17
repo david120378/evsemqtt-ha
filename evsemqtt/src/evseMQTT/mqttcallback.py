@@ -39,16 +39,19 @@ class MQTTCallback:
                 self.logger.info(f"Charging active — restarting session with {value} A.")
                 await self.commands.set_charge_stop()
 
-                # Wait until the wallbox leaves the "Charging" state (max 15 s).
-                # A fixed sleep is unreliable: the wallbox may still be stopping
-                # and silently reject set_charge_start if sent too early.
-                for _ in range(30):
+                # Wait until the wallbox reports "Idle" (max 20 s, poll every 500 ms).
+                # Waiting for "not Charging" is not sufficient — the wallbox sends
+                # in-flight status packets that arrive before the stop is fully
+                # processed internally. "Idle" is the definitive ready state.
+                for _ in range(40):
                     await asyncio.sleep(0.5)
-                    if self.device.charge.get('output_state') != "Charging":
-                        self.logger.info(f"Wallbox ready — sending charge_start with {value} A.")
+                    current_output_state = self.device.charge.get('output_state')
+                    self.logger.debug(f"Waiting for Idle, current output_state: {current_output_state}")
+                    if current_output_state == "Idle":
+                        self.logger.info(f"Wallbox Idle — sending charge_start with {value} A.")
                         break
                 else:
-                    self.logger.warning("Wallbox did not leave Charging state after 15 s — skipping restart.")
+                    self.logger.warning(f"Wallbox did not reach Idle state after 20 s (last state: {self.device.charge.get('output_state')}) — skipping restart.")
                     return
 
                 await asyncio.sleep(1)
