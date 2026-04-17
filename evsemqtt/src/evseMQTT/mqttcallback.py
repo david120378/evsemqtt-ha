@@ -38,7 +38,7 @@ class MQTTCallback:
             if self.device.charge.get('output_state') == "Charging":
                 self.logger.info(f"Charging active — restarting session with {value} A.")
                 await self.commands.set_charge_stop()
-                await asyncio.sleep(1)
+                await asyncio.sleep(3)
                 await self.commands.set_charge_start(int(value))
 
             # Re-issue get_config_output_amps to retrieve the data and put in device.config
