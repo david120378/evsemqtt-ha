@@ -38,7 +38,20 @@ class MQTTCallback:
             if self.device.charge.get('output_state') == "Charging":
                 self.logger.info(f"Charging active — restarting session with {value} A.")
                 await self.commands.set_charge_stop()
-                await asyncio.sleep(3)
+
+                # Wait until the wallbox leaves the "Charging" state (max 15 s).
+                # A fixed sleep is unreliable: the wallbox may still be stopping
+                # and silently reject set_charge_start if sent too early.
+                for _ in range(30):
+                    await asyncio.sleep(0.5)
+                    if self.device.charge.get('output_state') != "Charging":
+                        self.logger.info(f"Wallbox ready — sending charge_start with {value} A.")
+                        break
+                else:
+                    self.logger.warning("Wallbox did not leave Charging state after 15 s — skipping restart.")
+                    return
+
+                await asyncio.sleep(1)
                 await self.commands.set_charge_start(int(value))
 
             # Re-issue get_config_output_amps to retrieve the data and put in device.config

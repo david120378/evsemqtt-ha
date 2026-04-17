@@ -211,6 +211,11 @@ Sobald das Addon läuft und die Wallbox erkannt wurde, erscheint unter
 
 ## Changelog
 
+### v0.2.7 — 2026-04-17
+**Bugfix: Zuverlässiger Neustart nach charge_stop**
+
+- `mqttcallback.py`: Statt fixem Sleep wartet der Add-on jetzt aktiv bis `output_state` nicht mehr `"Charging"` ist (max. 15 s, Polling alle 500 ms). Erst dann wird `set_charge_start` gesendet. Verhindert, dass der Start-Befehl abgelehnt wird, weil die Wallbox intern noch im Stopp-Vorgang steckt (`start_result: 0, error_reason: 'Unknown reason'`).
+
 ### v0.2.6 — 2026-04-17
 **Bugfix: Wartezeit nach charge_stop erhöht**
 
