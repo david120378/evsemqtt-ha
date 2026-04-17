@@ -145,9 +145,50 @@ Im Ordner [`automations/`](automations/) liegen alle Wallbox-Automationen als YA
 | [`schalter_uberschussladen_aktivieren.yaml`](automations/schalter_uberschussladen_aktivieren.yaml) | Aktiviert Überschussladen-Modus und alle zugehörigen Automationen |
 | [`schalter_uberschussladen_deaktivieren.yaml`](automations/schalter_uberschussladen_deaktivieren.yaml) | Deaktiviert Überschussladen-Modus und alle zugehörigen Automationen |
 
-Alle Automationen (außer dem Watchdog) basieren auf Blueprints aus dem [pv_automatic_charging](https://github.com/david120378/pv_automatic_charging) Repository.
+Alle Automationen (außer dem Watchdog) basieren auf den **mitgelieferten Blueprints** (siehe nächster Abschnitt).
 
 > **Hinweis Watchdog:** Der Addon-Slug (`b043d8c5_evsemqtt`) in `wallbox_watchdog.yaml` ist instanzspezifisch. Den eigenen Slug findest du unter **Einstellungen → Addons → Besen Wallbox WiFi (UDP) → Info**.
+
+---
+
+## Blueprints *(optional)*
+
+> **Hinweis:** Die Blueprints sind vollständig optional. Sie sind die empfohlene Basis für das Überschussladen und ersetzen die manuellen Automationen im `automations/`-Ordner.
+
+Ab v0.3.0 sind alle Blueprints direkt im Addon-Repository unter [`blueprints/automation/david120378/`](blueprints/automation/david120378/) enthalten.
+
+### Installation
+
+1. **Einstellungen → Blueprints** öffnen
+2. Oben rechts **„Blueprint importieren"** klicken
+3. URL des jeweiligen Blueprints aus der Tabelle unten einfügen
+4. **Importieren** klicken — der Blueprint erscheint in der Liste
+
+Alternativ: Den Ordner `blueprints/automation/david120378/` in den HA-Konfigurationspfad `config/blueprints/automation/david120378/` kopieren.
+
+### Verfügbare Blueprints
+
+| Blueprint | Datei | Beschreibung |
+|-----------|-------|-------------|
+| Lademodus-Steuerung | [`wallbox_modus.yaml`](blueprints/automation/david120378/wallbox_modus.yaml) | Schaltet Wallbox bei Modus „Off" aus, bei „Manuell" auf konfigurierbaren Strom ein |
+| Überschussladen – Starten | [`wallbox_surplus_start.yaml`](blueprints/automation/david120378/wallbox_surplus_start.yaml) | Startet Laden bei ausreichend PV-Überschuss und SOC über Schwellwert |
+| Überschussladen – Ampere | [`wallbox_surplus_amps.yaml`](blueprints/automation/david120378/wallbox_surplus_amps.yaml) | Passt Ladestrom dynamisch an verfügbaren PV-Überschuss an (nur bei ≥3A Änderung) |
+| Überschussladen – Stoppen | [`wallbox_surplus_stop.yaml`](blueprints/automation/david120378/wallbox_surplus_stop.yaml) | Stoppt Laden bei zu wenig Überschuss, SOC-Unterschreitung oder Auto-Ziel-SOC |
+| Notfall-Laden | [`wallbox_notfall.yaml`](blueprints/automation/david120378/wallbox_notfall.yaml) | Notfall-Laden wenn Auto-SOC unter Schwellwert fällt (unabhängig vom Lademodus) |
+| Wetter-Nachtladung | [`wallbox_wetter.yaml`](blueprints/automation/david120378/wallbox_wetter.yaml) | Nächtliches Laden bei schlechter PV-Wettervorhersage für den nächsten Tag |
+
+### Zusammenspiel der Blueprints
+
+```
+[wallbox_modus]          → Off / Manuell
+[wallbox_surplus_start]  → startet Überschussladen
+[wallbox_surplus_amps]   → regelt Ladestrom laufend nach
+[wallbox_surplus_stop]   → stoppt Überschussladen
+[wallbox_notfall]        → Notfall-Laden (unabhängig vom Modus)
+[wallbox_wetter]         → Nachtladung bei Schlechtwetter
+```
+
+Alle Blueprints benötigen denselben `input_select`-Helfer (`Off / Manuell / Überschussladen`) sowie die Wallbox-Entitäten aus dem evseMQTT Add-on.
 
 ### Helfer
 
@@ -210,6 +251,13 @@ Sobald das Addon läuft und die Wallbox erkannt wurde, erscheint unter
 ---
 
 ## Changelog
+
+### v0.3.0 — 2026-04-17
+**Neu: Blueprints ins Addon-Repository integriert + Stabilitätsverbesserung Ampere-Regelung**
+
+- Alle 6 Blueprints aus dem separaten [pv_automatic_charging](https://github.com/david120378/pv_automatic_charging) Repository direkt unter `blueprints/automation/david120378/` ins Addon-Repo übernommen.
+- `wallbox_surplus_amps.yaml` (v0.3.0): `number.set_value` wird nur noch gesetzt wenn sich der Ziel-Ladestrom um **mindestens 3A** vom aktuellen Wert unterscheidet (vorher: bei jeder Einspeisung-Änderung). Verhindert, dass kleine PV-Schwankungen ständig Stop/Start-Zyklen in der Wallbox auslösen, da `mqttcallback.py` bei jeder Amp-Änderung während aktiver Session einen Neustart durchführt.
+- README: Blueprints-Sektion mit Installationsanleitung und Übersichtstabelle ergänzt.
 
 ### v0.2.10 — 2026-04-17
 **Verbesserung: Cooldown nach Neustart verhindert kaskadierte Unterbrechungen**

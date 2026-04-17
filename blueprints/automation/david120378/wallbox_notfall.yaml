@@ -1,0 +1,254 @@
+# ============================================================
+# Blueprint: Wallbox – Notfall-Laden
+# Version:   0.3.0
+# Changelog:
+#   0.3.0 – Neuer optionaler Input car_plug_sensor: prüft welches Auto
+#            tatsächlich angeschlossen ist (für Mehrfahr-Betrieb mit je
+#            einer Automation pro Fahrzeug).
+#   0.2.3 – Bugfix: time_fallback Recovery-Branch entfernt (stoppte Überschussladen
+#            alle 5 Min. weil car_soc fast immer >= recovery_threshold). Stop via
+#            soc_recovered Trigger (echter Übergang) ist ausreichend.
+#   0.2.2 – Versionskorrektur
+#   0.2.1 – Bugfix: time_pattern Fallback-Trigger + SOC-Zustandsprüfung
+#            (numeric_state triggert nur bei Übergang; war bei bereits
+#            unterschrittenem Auto-SOC nach HA-Neustart taub)
+#   0.2.0 – Initiale Version (SOC-Schwellwert, Hysterese, Benachrichtigung)
+# ============================================================
+blueprint:
+  name: "Wallbox: Notfall-Laden"
+  description: >
+    Startet das Laden automatisch wenn der Auto-SOC unter den Notfall-Schwellwert fällt –
+    unabhängig vom aktuell gewählten Lademodus.
+
+    Praktisch für den Alltag: Das Auto wird immer auf einen Mindeststand geladen,
+    egal ob Modus "Off", "Manuell" oder "Überschussladen" aktiv ist.
+
+    - **Notfall-Schwellwert:** Laden startet wenn SOC darunter fällt (Standard: 20%).
+    - **Erholungs-Schwellwert:** Laden stoppt wenn SOC wieder darüber steigt (Standard: 30%).
+    - **Notfall-Ladestrom:** Minimaler Ladestrom im Notfall (Standard: 6A).
+    - **Hysterese:** Der SOC muss 5 Minuten stabil unter dem Schwellwert liegen bevor
+      Notfall-Laden startet (verhindert Fehlauslösungen bei kurzen Messausreißern).
+
+    Das Laden wird automatisch gestoppt sobald der SOC den Erholungs-Schwellwert erreicht.
+
+    Für jedes Auto eine eigene Automation aus diesem Blueprint erstellen.
+  domain: automation
+  author: david120378
+  homeassistant:
+    min_version: "2023.4.0"
+  input:
+    wallbox_switch:
+      name: Wallbox Lade-Schalter
+      description: >
+        Der Switch zum Ein-/Ausschalten des Ladevorgangs.
+        (z.B. switch.SERIAL_charge aus dem evseMQTT Add-on)
+      selector:
+        entity:
+          domain: switch
+
+    wallbox_charge_amps:
+      name: Wallbox Ladestrom (Zahl-Entity)
+      description: >
+        Die Number-Entity für den Ladestrom in Ampere.
+        (z.B. number.SERIAL_charge_amps aus dem evseMQTT Add-on)
+      selector:
+        entity:
+          domain: number
+
+    plug_state_sensor:
+      name: Wallbox Verbindungs-Status Sensor
+      description: >
+        Sensor für den Verbindungsstatus der Wallbox – prüft ob ein Auto angeschlossen ist.
+        (z.B. sensor.SERIAL_plug_state aus dem evseMQTT Add-on)
+      selector:
+        entity:
+          domain: sensor
+
+    car_soc_sensor:
+      name: Auto SOC Sensor
+      description: >
+        Entity-ID des Auto-Akkustand-Sensors in Prozent.
+        (z.B. sensor.tesla_battery_level)
+      selector:
+        entity:
+          domain: sensor
+          device_class: battery
+
+    car_plug_sensor:
+      name: Fahrzeug-eigener Stecker-Sensor (optional)
+      description: >
+        Sensor oder Binary Sensor des Fahrzeugs selbst, der anzeigt ob es an einem
+        Ladekabel angeschlossen ist. Wird genutzt um bei Mehrfahr-Betrieb sicherzustellen
+        dass nur die Automation des tatsächlich angeschlossenen Autos auslöst.
+        Leer lassen wenn nur ein Auto verwendet wird.
+        - binary_sensor (device_class: plug): Automation greift wenn Sensor "on" ist.
+        - sensor (z.B. sensor.FAHRZEUG_charging_port_plug_state): Automation greift wenn
+          Sensor nicht "DISCONNECTED", "Disconnected", "disconnected" oder "unavailable" ist.
+      default: ""
+      selector:
+        entity: {}
+
+    notfall_threshold:
+      name: Notfall-Schwellwert (%)
+      description: >
+        Laden startet automatisch wenn der Auto-SOC unter diesen Wert fällt
+        und für 5 Minuten dort bleibt.
+        Standard: 20%
+      default: 20
+      selector:
+        number:
+          min: 5
+          max: 50
+          step: 5
+          unit_of_measurement: "%"
+
+    recovery_threshold:
+      name: Erholungs-Schwellwert (%)
+      description: >
+        Laden stoppt wenn der Auto-SOC wieder über diesen Wert steigt.
+        Muss höher als der Notfall-Schwellwert sein (Hysterese-Band).
+        Standard: 30%
+      default: 30
+      selector:
+        number:
+          min: 10
+          max: 80
+          step: 5
+          unit_of_measurement: "%"
+
+    notfall_amps:
+      name: Notfall-Ladestrom (A)
+      description: >
+        Ladestrom im Notfall-Modus. Nur so viel laden wie nötig um
+        die Batterie zu schonen.
+        Standard: 6A (Minimum)
+      default: 6
+      selector:
+        number:
+          min: 6
+          max: 32
+          step: 1
+          unit_of_measurement: A
+
+    notify_service:
+      name: Benachrichtigungs-Dienst (optional)
+      description: >
+        Sendet eine Nachricht wenn das Notfall-Laden startet oder stoppt.
+        Leer lassen für keine Benachrichtigung.
+      default: ""
+      selector:
+        text: {}
+
+variables:
+  notify_svc: !input notify_service
+  plug_entity: !input plug_state_sensor
+  car_soc_entity: !input car_soc_sensor
+  car_plug_entity: !input car_plug_sensor
+  notfall_threshold_v: !input notfall_threshold
+  recovery_threshold_v: !input recovery_threshold
+  notfall_amps_v: !input notfall_amps
+
+trigger:
+  - platform: numeric_state
+    entity_id: !input car_soc_sensor
+    below: !input notfall_threshold
+    for: "00:05:00"
+    id: soc_critical
+
+  - platform: numeric_state
+    entity_id: !input car_soc_sensor
+    above: !input recovery_threshold
+    id: soc_recovered
+
+  # Fallback: Prüft alle 5 Min. ob SOC unter Notfall-Schwellwert oder erholt.
+  # Greift wenn der Übergang bereits stattfand bevor die Automation aktiviert wurde.
+  - platform: time_pattern
+    minutes: "/5"
+    id: time_fallback
+
+condition:
+  - condition: template
+    alias: "Auto ist angeschlossen"
+    value_template: >
+      {{ states(plug_entity) not in ['Disconnected', 'disconnected', 'unavailable', 'unknown'] }}
+
+  - condition: template
+    alias: "Fahrzeug-eigener Stecker prüfen (optional)"
+    value_template: >
+      {% if car_plug_entity == '' %}
+        true
+      {% elif car_plug_entity.startswith('binary_sensor.') %}
+        {{ is_state(car_plug_entity, 'on') }}
+      {% else %}
+        {{ states(car_plug_entity) not in ['DISCONNECTED', 'Disconnected', 'disconnected', 'unavailable', 'unknown', 'none'] }}
+      {% endif %}
+
+action:
+  - choose:
+      - conditions:
+          - condition: trigger
+            id: soc_critical
+        sequence:
+          - service: number.set_value
+            target:
+              entity_id: !input wallbox_charge_amps
+            data:
+              value: "{{ notfall_amps_v }}"
+
+          - service: switch.turn_on
+            target:
+              entity_id: !input wallbox_switch
+
+          - if:
+              - condition: template
+                value_template: "{{ notify_svc != '' }}"
+            then:
+              - service: "{{ notify_svc }}"
+                data:
+                  title: "🚨 Wallbox: Notfall-Laden gestartet"
+                  message: >
+                    Auto-SOC unter {{ notfall_threshold_v }}% gefallen.
+                    Notfall-Laden mit {{ notfall_amps_v }}A gestartet.
+
+      - conditions:
+          - condition: trigger
+            id: soc_recovered
+        sequence:
+          - service: switch.turn_off
+            target:
+              entity_id: !input wallbox_switch
+
+          - if:
+              - condition: template
+                value_template: "{{ notify_svc != '' }}"
+            then:
+              - service: "{{ notify_svc }}"
+                data:
+                  title: "✅ Wallbox: Notfall-Laden beendet"
+                  message: >
+                    Auto-SOC hat {{ recovery_threshold_v }}% erreicht.
+                    Notfall-Laden gestoppt.
+
+      # Fallback: Stellt sicher dass Notfall-Laden aktiv ist wenn SOC bereits
+      # unter Schwellwert lag beim Aktivieren der Automation.
+      # Kein Notify um Spam bei jedem 5-Min-Check zu vermeiden.
+      # KEIN Recovery-Branch hier: soc_recovered Trigger (echter Übergang) reicht,
+      # und car_soc >= recovery_threshold ist fast immer true → würde Überschussladen stoppen.
+      - conditions:
+          - condition: trigger
+            id: time_fallback
+          - condition: template
+            value_template: >
+              {{ states(car_soc_entity) | float(100) < notfall_threshold_v }}
+        sequence:
+          - service: number.set_value
+            target:
+              entity_id: !input wallbox_charge_amps
+            data:
+              value: "{{ notfall_amps_v }}"
+
+          - service: switch.turn_on
+            target:
+              entity_id: !input wallbox_switch
+
+mode: single

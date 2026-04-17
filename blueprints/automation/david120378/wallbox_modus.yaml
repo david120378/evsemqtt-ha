@@ -1,0 +1,134 @@
+# ============================================================
+# Blueprint: Wallbox – Lademodus-Steuerung
+# Version:   0.2.2
+# Changelog:
+#   0.2.2 – Versionskorrektur
+#   0.2.1 – Manuell-Modus setzt Ladestrom auf konfigurierbaren Wert (Standard: 16A)
+#   0.2.0 – Optionaler Benachrichtigungs-Dienst beim Moduswechsel
+#   0.1.0 – Initiale Version (Off / Manuell)
+# ============================================================
+blueprint:
+  name: "Wallbox: Lademodus-Steuerung (Off / Manuell)"
+  description: >
+    Steuert die Wallbox basierend auf dem ausgewählten Lademodus.
+
+    - **Off**: Stoppt das Laden sofort.
+    - **Manuell**: Setzt den Ladestrom auf den konfigurierten Wert und startet das Laden.
+
+    Optional wird beim Moduswechsel eine Benachrichtigung gesendet.
+
+    Benötigt den Helfer "Wallbox Modus" (input_select) mit den Optionen:
+    Off, Manuell, Überschussladen.
+
+    Wird zusammen mit den Blueprints "Überschussladen – Starten/Ampere/Stoppen"
+    verwendet.
+  domain: automation
+  author: david120378
+  homeassistant:
+    min_version: "2023.4.0"
+  input:
+    mode_selector:
+      name: Lademodus-Auswahl
+      description: >
+        Der Dropdown-Helfer für den Lademodus.
+        (Einstellungen → Helfer → Dropdown mit Optionen: Off, Manuell, Überschussladen)
+      selector:
+        entity:
+          domain: input_select
+
+    wallbox_switch:
+      name: Wallbox Lade-Schalter
+      description: >
+        Der Switch zum Ein-/Ausschalten des Ladevorgangs.
+        (z.B. switch.SERIAL_charge aus dem evseMQTT Add-on)
+      selector:
+        entity:
+          domain: switch
+
+    wallbox_charge_amps:
+      name: Wallbox Ladestrom (Zahl-Entity)
+      description: >
+        Die Number-Entity für den Ladestrom in Ampere.
+        (z.B. number.SERIAL_charge_amps aus dem evseMQTT Add-on)
+      selector:
+        entity:
+          domain: number
+
+    manual_charge_amps:
+      name: Ladestrom im Manuell-Modus (A)
+      description: >
+        Ladestrom der beim Wechsel auf "Manuell" gesetzt wird.
+        Standard: 16A
+      default: 16
+      selector:
+        number:
+          min: 6
+          max: 32
+          step: 1
+          unit_of_measurement: A
+
+    notify_service:
+      name: Benachrichtigungs-Dienst (optional)
+      description: >
+        Sendet eine Nachricht beim Moduswechsel.
+        Beispiele: notify.mobile_app_iphone, notify.telegram
+        Leer lassen für keine Benachrichtigung.
+      default: ""
+      selector:
+        text: {}
+
+variables:
+  notify_svc: !input notify_service
+  manual_amps_v: !input manual_charge_amps
+
+trigger:
+  - platform: state
+    entity_id: !input mode_selector
+    to: "Off"
+    id: mode_off
+
+  - platform: state
+    entity_id: !input mode_selector
+    to: "Manuell"
+    id: mode_manuell
+
+action:
+  - choose:
+      - conditions:
+          - condition: trigger
+            id: mode_off
+        sequence:
+          - service: switch.turn_off
+            target:
+              entity_id: !input wallbox_switch
+          - if:
+              - condition: template
+                value_template: "{{ notify_svc != '' }}"
+            then:
+              - service: "{{ notify_svc }}"
+                data:
+                  title: "🔌 Wallbox: Modus geändert"
+                  message: "Lademodus auf 'Off' gestellt. Laden gestoppt."
+
+      - conditions:
+          - condition: trigger
+            id: mode_manuell
+        sequence:
+          - service: number.set_value
+            target:
+              entity_id: !input wallbox_charge_amps
+            data:
+              value: "{{ manual_amps_v }}"
+          - service: switch.turn_on
+            target:
+              entity_id: !input wallbox_switch
+          - if:
+              - condition: template
+                value_template: "{{ notify_svc != '' }}"
+            then:
+              - service: "{{ notify_svc }}"
+                data:
+                  title: "🔌 Wallbox: Modus geändert"
+                  message: "Lademodus auf 'Manuell' gestellt. Laden mit {{ manual_amps_v }}A gestartet."
+
+mode: single

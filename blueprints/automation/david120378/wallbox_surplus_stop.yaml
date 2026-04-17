@@ -1,0 +1,226 @@
+# ============================================================
+# Blueprint: Wallbox – Überschussladen – Stoppen
+# Version:   0.2.4
+# Changelog:
+#   0.2.4 – Bugfix: time_pattern stoppte Laden während Wallbox lädt (Einspeisung
+#            fällt beim Laden unter Stoppschwelle → Loop). time_pattern prüft
+#            jetzt nur noch SOC/Auto-Bedingungen; Einspeisung wird nur via
+#            feedin_low Trigger (mit for-Verzögerung) ausgewertet.
+#   0.2.3 – kW-Sensor-Unterstützung: sensor_in_kw Boolean + kw_multiplier
+#            (FOX-ESS liefert kW → Vergleich mit W-Schwelle schlug immer fehl)
+#   0.2.2 – Versionskorrektur
+#   0.2.1 – Bugfix: time_pattern Fallback-Trigger + Stopbedingung-Check
+#            (template/numeric_state triggert nur bei Übergang; war bei bereits
+#            unterschrittenem SOC taub)
+#   0.2.0 – Auto-Ziel-SOC (pro Auto konfigurierbar), Benachrichtigung mit Grund
+#   0.1.0 – Initiale Version (Einspeisung-Hysterese, PV-Batterie SOC)
+# ============================================================
+blueprint:
+  name: "Wallbox: Überschussladen – Stoppen"
+  description: >
+    Stoppt das Laden wenn:
+    - zu wenig Solar-Überschuss vorhanden ist (mit Hysterese),
+    - der PV-Batterie-SOC unter den Schwellwert fällt, oder
+    - das Auto seinen Ziel-SOC erreicht hat.
+
+    **Ausschalt-Hysterese (Einspeisung):** Das Laden stoppt erst wenn die Einspeisung
+    für eine konfigurierbare Zeit (Standard: 5 Minuten) unter der Stoppschwelle bleibt.
+    Kurze Wolkenphasen (< 5 Min.) unterbrechen das Laden nicht.
+
+    **Mindest-SOC Auto (optional):** Pro Auto konfigurierbar. Laden stoppt automatisch
+    wenn das Auto den eingestellten Ziel-SOC erreicht (z.B. 80% zum Akku-Schutz).
+    Für jedes Auto eine eigene Automation aus diesem Blueprint erstellen.
+
+    Wird zusammen mit "Modus-Steuerung", "Starten" und "Ampere anpassen" verwendet.
+  domain: automation
+  author: david120378
+  homeassistant:
+    min_version: "2023.4.0"
+  input:
+    mode_selector:
+      name: Lademodus-Auswahl
+      description: Derselbe Dropdown-Helfer wie im Blueprint "Modus-Steuerung".
+      selector:
+        entity:
+          domain: input_select
+
+    wallbox_switch:
+      name: Wallbox Lade-Schalter
+      selector:
+        entity:
+          domain: switch
+
+    feedin_sensor:
+      name: Solar-Einspeisung Sensor
+      description: Sensor für die aktuelle Einspeisung ins Netz in Watt (FOX-ESS).
+      selector:
+        entity:
+          domain: sensor
+          device_class: power
+
+    soc_sensor:
+      name: PV-Batterie SOC Sensor
+      description: Sensor für den Ladezustand der PV-Batterie in Prozent (FOX-ESS).
+      selector:
+        entity:
+          domain: sensor
+          device_class: battery
+
+    soc_threshold_helper:
+      name: SOC-Schwellwert Helfer
+      description: Derselbe input_number Helfer wie im Blueprint "Starten".
+      selector:
+        entity:
+          domain: input_number
+
+    stop_threshold_watts:
+      name: Stoppschwelle (Watt)
+      description: >
+        Unter diesem Einspeisewert wird das Laden gestoppt (nach Ablauf der Verzögerung).
+        Sollte deutlich unter der Startschwelle liegen (Hysterese-Band).
+        3-phasig: 2A × 3 × 230V = 1380 W
+        1-phasig: 2A × 1 × 230V = 460 W
+      default: 1380
+      selector:
+        number:
+          min: 0
+          max: 10000
+          step: 100
+          unit_of_measurement: W
+
+    stop_delay:
+      name: Ausschalt-Verzögerung (Einspeisung)
+      description: >
+        Wie lange die Einspeisung unter der Stoppschwelle sein muss bevor das Laden stoppt.
+        Standard: 5 Minuten (schützt vor kurzen Wolken).
+      default: "00:05:00"
+      selector:
+        duration: {}
+
+    soc_stop_delay:
+      name: Ausschalt-Verzögerung (SOC)
+      description: "Wie lange der PV-SOC unter dem Schwellwert sein muss bevor gestoppt wird. Standard: 1 Minute."
+      default: "00:01:00"
+      selector:
+        duration: {}
+
+    car_soc_sensor:
+      name: Auto SOC Sensor (optional)
+      description: >
+        Entity-ID des Auto-Akkustand-Sensors in Prozent (z.B. sensor.tesla_battery_level).
+        Laden stoppt wenn dieser Wert den Ziel-SOC erreicht (Akku-Schutz).
+        Für jedes Auto eine eigene Automation erstellen.
+        Leer lassen wenn nicht benötigt.
+      default: ""
+      selector:
+        text: {}
+
+    car_soc_max:
+      name: Auto Ziel-SOC (%)
+      description: >
+        Laden stoppt wenn das Auto diesen Ladezustand erreicht.
+        Empfehlung: 80% für Alltag (Akku-Schonung), 100% nur für lange Fahrten.
+      default: 80
+      selector:
+        number:
+          min: 20
+          max: 100
+          step: 5
+          unit_of_measurement: "%"
+
+    sensor_in_kw:
+      name: Sensor-Einheit kW
+      description: >
+        Aktivieren wenn der Einspeisung-Sensor in kW misst (z.B. FOX-ESS).
+        Deaktivieren wenn der Sensor in Watt (W) misst.
+      default: true
+      selector:
+        boolean: {}
+
+    notify_service:
+      name: Benachrichtigungs-Dienst (optional)
+      description: >
+        Sendet eine Nachricht wenn das Laden gestoppt wird (inkl. Grund).
+        Leer lassen für keine Benachrichtigung.
+      default: ""
+      selector:
+        text: {}
+
+variables:
+  soc_entity: !input soc_sensor
+  soc_threshold_entity: !input soc_threshold_helper
+  car_soc_entity: !input car_soc_sensor
+  car_soc_max_v: !input car_soc_max
+  feedin_entity: !input feedin_sensor
+  stop_threshold_w: !input stop_threshold_watts
+  notify_svc: !input notify_service
+  sensor_kw: !input sensor_in_kw
+  kw_multiplier: "{{ 1000 if sensor_kw else 1 }}"
+
+trigger:
+  # Template-Trigger: konvertiert kW → W über kw_multiplier und wartet stop_delay
+  - platform: template
+    alias: "Einspeisung unter Stoppschwelle"
+    value_template: >
+      {{ states(feedin_entity) | float(0) * kw_multiplier < stop_threshold_w }}
+    for: !input stop_delay
+    id: feedin_low
+
+  - platform: template
+    alias: "PV-Batterie SOC unter Schwellwert"
+    value_template: >
+      {{ states(soc_entity) | float(0) < states(soc_threshold_entity) | float(0) }}
+    for: !input soc_stop_delay
+    id: soc_low
+
+  - platform: template
+    alias: "Auto SOC Ziel erreicht"
+    value_template: >
+      {{ car_soc_entity != '' and
+         states(car_soc_entity) | float(100) >= car_soc_max_v }}
+    for: "00:01:00"
+    id: car_full
+
+  # Fallback: Prüft alle 5 Min. ob eine Stopbedingung erfüllt ist.
+  # Greift wenn der Übergang bereits stattfand bevor die Automation aktiviert wurde.
+  - platform: time_pattern
+    minutes: "/5"
+
+condition:
+  - condition: state
+    entity_id: !input mode_selector
+    state: "Überschussladen"
+
+  - condition: state
+    entity_id: !input wallbox_switch
+    state: "on"
+
+  - condition: template
+    alias: "Mindestens eine Stopbedingung erfüllt"
+    value_template: >
+      {{ trigger.id == 'feedin_low'
+         or (states(soc_entity) | float(0) < states(soc_threshold_entity) | float(0))
+         or (car_soc_entity != '' and states(car_soc_entity) | float(100) >= car_soc_max_v) }}
+
+action:
+  - service: switch.turn_off
+    target:
+      entity_id: !input wallbox_switch
+
+  - if:
+      - condition: template
+        value_template: "{{ notify_svc != '' }}"
+    then:
+      - service: "{{ notify_svc }}"
+        data:
+          title: "🔋 Wallbox: Überschussladen gestoppt"
+          message: >
+            {% if trigger.id == 'car_full' %}
+              Auto hat {{ car_soc_max_v }}% erreicht. Laden gestoppt.
+            {% elif trigger.id == 'feedin_low' %}
+              Zu wenig Solar-Überschuss für mehr als {{ stop_delay }}. Laden gestoppt.
+            {% else %}
+              PV-Batterie unter Schwellwert. Laden gestoppt.
+            {% endif %}
+
+mode: single

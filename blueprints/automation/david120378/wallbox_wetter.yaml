@@ -1,0 +1,270 @@
+# ============================================================
+# Blueprint: Wallbox – Wetter-Vorschau & Nachtladung
+# Version:   0.2.1
+# Changelog:
+#   0.2.0 – Initiale Version (Wettercheck, Nachtladung, Auto-SOC, Benachrichtigung)
+# ============================================================
+blueprint:
+  name: "Wallbox: Wetter-Vorschau – Nachtladung"
+  description: >
+    Prüft täglich die Wettervorhersage für den nächsten Tag. Bei schlechtem Wetter
+    (wenig Solar-Ertrag zu erwarten) wird nachts automatisch geladen.
+
+    **Ablauf:**
+    1. Täglich zur Prüfzeit (z.B. 17:00 Uhr) wird die Wettervorhersage abgerufen.
+    2. Bei schlechtem Wetter (bewölkt, Regen, Nebel, ...) wird das Nachtladungs-Flag gesetzt.
+    3. Zur Nacht-Startzeit beginnt das Laden (wenn Flag gesetzt und Auto angesteckt).
+    4. Zur Nacht-Endzeit stoppt das Laden automatisch.
+
+    **Optionaler Auto-SOC:** Wenn ein SOC-Sensor angegeben ist, startet die Nachtladung
+    nur wenn der Auto-SOC unter dem Ziel-SOC liegt.
+
+    **Benötigte Helfer (einmalig erstellen):**
+    - `input_boolean.wallbox_nacht_laden` (Schalter, Standard: off)
+    - `input_number.wallbox_nacht_ziel_soc` (Zahl, 0–100%, Schritt 5, Standard 80)
+
+    **Hinweis:** Benötigt Home Assistant 2023.9+ (für den `weather.get_forecasts` Service).
+  domain: automation
+  author: david120378
+  homeassistant:
+    min_version: "2023.9.0"
+  input:
+    weather_entity:
+      name: Wetter-Entity
+      description: >
+        Die HA Wetter-Integration.
+        (z.B. weather.home aus der Met.no oder OpenWeatherMap Integration)
+      selector:
+        entity:
+          domain: weather
+
+    check_time:
+      name: Prüfzeit (täglich)
+      description: >
+        Uhrzeit für den täglichen Wettercheck.
+        Standard: 17:00 Uhr (Vorabend-Check für die folgende Nacht)
+      default: "17:00:00"
+      selector:
+        time: {}
+
+    night_start:
+      name: Nachtladung – Start
+      description: "Nachtladung startet ab dieser Uhrzeit. Standard: 01:00 Uhr"
+      default: "01:00:00"
+      selector:
+        time: {}
+
+    night_end:
+      name: Nachtladung – Ende
+      description: "Nachtladung endet zu dieser Uhrzeit. Standard: 05:00 Uhr"
+      default: "05:00:00"
+      selector:
+        time: {}
+
+    wallbox_switch:
+      name: Wallbox Lade-Schalter
+      description: >
+        Der Switch zum Ein-/Ausschalten des Ladevorgangs.
+        (z.B. switch.SERIAL_charge aus dem evseMQTT Add-on)
+      selector:
+        entity:
+          domain: switch
+
+    wallbox_charge_amps:
+      name: Wallbox Ladestrom (Zahl-Entity)
+      description: >
+        Die Number-Entity für den Ladestrom in Ampere.
+        (z.B. number.SERIAL_charge_amps aus dem evseMQTT Add-on)
+      selector:
+        entity:
+          domain: number
+
+    night_charge_amps:
+      name: Nacht-Ladestrom (A)
+      description: >
+        Ladestrom während der Nachtladung.
+        Standard: 16A (guter Kompromiss zwischen Ladegeschwindigkeit und Netzbelastung)
+      default: 16
+      selector:
+        number:
+          min: 6
+          max: 32
+          step: 1
+          unit_of_measurement: A
+
+    nacht_laden_flag:
+      name: Nachtladung-Flag Helfer
+      description: >
+        Der input_boolean Helfer der die Nachtladung aktiviert/deaktiviert.
+        (Einstellungen → Helfer → Schalter, Name: "Wallbox Nacht Laden")
+        → Entity-ID: input_boolean.wallbox_nacht_laden
+      selector:
+        entity:
+          domain: input_boolean
+
+    nacht_ziel_soc_helper:
+      name: Nacht-Ziel-SOC Helfer
+      description: >
+        Der input_number Helfer für den Ziel-SOC der Nachtladung.
+        (Einstellungen → Helfer → Zahl, Min 0, Max 100, Schritt 5, Einheit %)
+        → Entity-ID: input_number.wallbox_nacht_ziel_soc
+      selector:
+        entity:
+          domain: input_number
+
+    car_soc_sensor:
+      name: Auto SOC Sensor (optional)
+      description: >
+        Entity-ID des Auto-Akkustand-Sensors in Prozent (z.B. sensor.tesla_battery_level).
+        Wenn angegeben, startet die Nachtladung nur wenn der SOC unter dem Ziel-SOC liegt.
+        Leer lassen wenn nicht benötigt.
+      default: ""
+      selector:
+        text: {}
+
+    notify_service:
+      name: Benachrichtigungs-Dienst (optional)
+      description: >
+        Sendet Benachrichtigungen über Wettercheck-Ergebnis und Nachtladungs-Status.
+        Leer lassen für keine Benachrichtigung.
+      default: ""
+      selector:
+        text: {}
+
+variables:
+  weather_entity_id: !input weather_entity
+  car_soc_entity: !input car_soc_sensor
+  nacht_ziel_entity: !input nacht_ziel_soc_helper
+  night_start_v: !input night_start
+  night_end_v: !input night_end
+  night_amps_v: !input night_charge_amps
+  notify_svc: !input notify_service
+
+trigger:
+  - platform: time
+    at: !input check_time
+    id: weather_check
+
+  - platform: time
+    at: !input night_start
+    id: night_start
+
+  - platform: time
+    at: !input night_end
+    id: night_end
+
+action:
+  - choose:
+      # ── Wettercheck ────────────────────────────────────────────
+      - conditions:
+          - condition: trigger
+            id: weather_check
+        sequence:
+          - service: weather.get_forecasts
+            data:
+              type: daily
+            target:
+              entity_id: !input weather_entity
+            response_variable: forecast_data
+
+          - variables:
+              tomorrow_condition: >
+                {{ forecast_data[weather_entity_id].forecast[0].condition }}
+              is_bad_weather: >
+                {{ tomorrow_condition in [
+                  'rainy', 'pouring', 'cloudy', 'partlycloudy',
+                  'lightning', 'lightning-rainy',
+                  'snowy', 'snowy-rainy', 'fog', 'hail', 'windy'
+                ] }}
+
+          - if:
+              - condition: template
+                value_template: "{{ is_bad_weather }}"
+            then:
+              - service: input_boolean.turn_on
+                target:
+                  entity_id: !input nacht_laden_flag
+              - if:
+                  - condition: template
+                    value_template: "{{ notify_svc != '' }}"
+                then:
+                  - service: "{{ notify_svc }}"
+                    data:
+                      title: "🌧️ Wallbox: Nachtladung geplant"
+                      message: >
+                        Morgen {{ tomorrow_condition }}.
+                        Nachtladung {{ night_start_v }}–{{ night_end_v }} Uhr aktiviert.
+            else:
+              - service: input_boolean.turn_off
+                target:
+                  entity_id: !input nacht_laden_flag
+              - if:
+                  - condition: template
+                    value_template: "{{ notify_svc != '' }}"
+                then:
+                  - service: "{{ notify_svc }}"
+                    data:
+                      title: "☀️ Wallbox: Nachtladung nicht nötig"
+                      message: >
+                        Morgen {{ tomorrow_condition }}.
+                        Ausreichend Solar geplant – keine Nachtladung.
+
+      # ── Nachtladung starten ────────────────────────────────────
+      - conditions:
+          - condition: trigger
+            id: night_start
+          - condition: state
+            entity_id: !input nacht_laden_flag
+            state: "on"
+        sequence:
+          - if:
+              - condition: template
+                alias: "Auto SOC unter Ziel-SOC (oder kein Sensor konfiguriert)"
+                value_template: >
+                  {{ car_soc_entity == '' or
+                     states(car_soc_entity) | float(100) < states(nacht_ziel_entity) | float(80) }}
+            then:
+              - service: number.set_value
+                target:
+                  entity_id: !input wallbox_charge_amps
+                data:
+                  value: "{{ night_amps_v }}"
+
+              - service: switch.turn_on
+                target:
+                  entity_id: !input wallbox_switch
+
+              - if:
+                  - condition: template
+                    value_template: "{{ notify_svc != '' }}"
+                then:
+                  - service: "{{ notify_svc }}"
+                    data:
+                      title: "🌙 Wallbox: Nachtladung gestartet"
+                      message: >
+                        Nachtladung mit {{ night_amps_v }}A gestartet.
+                        Endet automatisch um {{ night_end_v }} Uhr.
+
+      # ── Nachtladung stoppen ────────────────────────────────────
+      - conditions:
+          - condition: trigger
+            id: night_end
+        sequence:
+          - service: switch.turn_off
+            target:
+              entity_id: !input wallbox_switch
+
+          - service: input_boolean.turn_off
+            target:
+              entity_id: !input nacht_laden_flag
+
+          - if:
+              - condition: template
+                value_template: "{{ notify_svc != '' }}"
+            then:
+              - service: "{{ notify_svc }}"
+                data:
+                  title: "☀️ Wallbox: Nachtladung beendet"
+                  message: "Nachtladung abgeschlossen. Wallbox gestoppt."
+
+mode: single

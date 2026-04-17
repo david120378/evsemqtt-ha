@@ -1,0 +1,266 @@
+# ============================================================
+# Blueprint: Wallbox – Überschussladen – Starten
+# Version:   0.2.3
+# Changelog:
+#   0.2.3 – kW-Sensor-Unterstützung: sensor_in_kw Boolean + kw_multiplier
+#            (FOX-ESS liefert kW, Schwellen sind in W → Vergleich schlug immer fehl)
+#   0.2.2 – Versionskorrektur
+#   0.2.1 – Bugfix: time_pattern Fallback-Trigger + Einspeisung-Bedingung
+#            (numeric_state triggert nur bei Übergang; war bei aktivem Überschuss taub)
+#   0.2.0 – Einspeisung-Puffer, Zeitfenster (Start/End), Benachrichtigung
+#   0.1.0 – Initiale Version (Hysterese, SOC-Schwellwert)
+# ============================================================
+blueprint:
+  name: "Wallbox: Überschussladen – Starten"
+  description: >
+    Startet das Laden automatisch wenn genug Solar-Überschuss vorhanden ist
+    UND der PV-Batterie-SOC über dem eingestellten Schwellwert liegt.
+
+    **Einschalt-Hysterese:** Der Überschuss muss für eine konfigurierbare Zeit
+    (Standard: 3 Minuten) konstant vorhanden sein, bevor das Laden beginnt.
+    So werden kurze Wolkenlücken ignoriert.
+
+    **Einspeisung-Puffer:** Ein konfigurierbarer Pufferwert (Standard: 200 W) wird
+    von der Einspeisung abgezogen. Das verhindert, dass Schwankungen sofort zu
+    Änderungen führen und erhöht die Stabilität der Regelung.
+
+    **Zeitfenster:** Optional kann ein Zeitfenster definiert werden, in dem das
+    Überschussladen aktiv ist (z.B. nur 08:00–20:00 Uhr).
+
+    **Berechnung Startschwelle (3-phasig):** 6A × 3 × 230V = 4140 W
+
+    Wird zusammen mit den Blueprints "Modus-Steuerung", "Ampere anpassen"
+    und "Stoppen" verwendet.
+  domain: automation
+  author: david120378
+  homeassistant:
+    min_version: "2023.4.0"
+  input:
+    mode_selector:
+      name: Lademodus-Auswahl
+      description: >
+        Der Dropdown-Helfer für den Lademodus.
+        (Einstellungen → Helfer → Dropdown mit Optionen: Off, Manuell, Überschussladen)
+      selector:
+        entity:
+          domain: input_select
+
+    wallbox_switch:
+      name: Wallbox Lade-Schalter
+      description: >
+        Der Switch zum Ein-/Ausschalten des Ladevorgangs.
+        (z.B. switch.SERIAL_charge aus dem evseMQTT Add-on)
+      selector:
+        entity:
+          domain: switch
+
+    wallbox_charge_amps:
+      name: Wallbox Ladestrom (Zahl-Entity)
+      description: >
+        Die Number-Entity für den Ladestrom in Ampere.
+        (z.B. number.SERIAL_charge_amps aus dem evseMQTT Add-on)
+      selector:
+        entity:
+          domain: number
+
+    feedin_sensor:
+      name: Solar-Einspeisung Sensor
+      description: >
+        Sensor der die aktuelle Einspeisung ins Netz in Watt anzeigt.
+        (z.B. aus der FOX-ESS Integration)
+      selector:
+        entity:
+          domain: sensor
+          device_class: power
+
+    soc_sensor:
+      name: PV-Batterie SOC Sensor
+      description: >
+        Sensor für den Ladezustand der PV-Batterie in Prozent.
+        (z.B. aus der FOX-ESS Integration)
+      selector:
+        entity:
+          domain: sensor
+          device_class: battery
+
+    soc_threshold_helper:
+      name: SOC-Schwellwert Helfer
+      description: >
+        Der Zahl-Helfer für den SOC-Schwellwert.
+        (Einstellungen → Helfer → Zahl, Min 0, Max 100, Schritt 5, Einheit %)
+      selector:
+        entity:
+          domain: input_number
+
+    phases:
+      name: Anzahl Ladephasen
+      description: Anzahl der Phasen der Wallbox.
+      default: "3"
+      selector:
+        select:
+          options:
+            - label: "3-phasig (3 × 230V, Divisor 690)"
+              value: "3"
+            - label: "1-phasig (1 × 230V, Divisor 230)"
+              value: "1"
+
+    start_threshold_watts:
+      name: Startschwelle (Watt)
+      description: >
+        Mindest-Einspeisung in Watt um das Laden zu starten (vor Puffer-Abzug).
+        3-phasig: 6A × 3 × 230V = 4140 W
+        1-phasig: 6A × 1 × 230V = 1380 W
+      default: 4140
+      selector:
+        number:
+          min: 500
+          max: 22000
+          step: 100
+          unit_of_measurement: W
+
+    puffer_watt:
+      name: Einspeisung-Puffer (Watt)
+      description: >
+        Pufferwert der von der Einspeisung abgezogen wird, bevor der Ladestrom
+        berechnet wird. Stabilisiert die Regelung bei schwankender Solarproduktion.
+        Standard: 200 W
+      default: 200
+      selector:
+        number:
+          min: 0
+          max: 1000
+          step: 50
+          unit_of_measurement: W
+
+    start_delay:
+      name: Einschalt-Verzögerung
+      description: >
+        Wie lange der Überschuss stabil sein muss bevor das Laden startet.
+        Standard: 3 Minuten (schützt vor Wolkenlücken).
+      default: "00:03:00"
+      selector:
+        duration: {}
+
+    zeitfenster_aktiv:
+      name: Zeitfenster aktivieren
+      description: >
+        Wenn aktiviert, startet das Überschussladen nur innerhalb des definierten
+        Zeitfensters (Start- und Endzeit unten).
+      default: false
+      selector:
+        boolean: {}
+
+    start_time:
+      name: Zeitfenster – Frühester Start
+      description: "Überschussladen startet frühestens zu dieser Uhrzeit. (Nur wenn Zeitfenster aktiv)"
+      default: "08:00:00"
+      selector:
+        time: {}
+
+    end_time:
+      name: Zeitfenster – Spätester Start
+      description: "Überschussladen startet nicht mehr nach dieser Uhrzeit. (Nur wenn Zeitfenster aktiv)"
+      default: "20:00:00"
+      selector:
+        time: {}
+
+    sensor_in_kw:
+      name: Sensor-Einheit kW
+      description: >
+        Aktivieren wenn der Einspeisung-Sensor in kW misst (z.B. FOX-ESS).
+        Deaktivieren wenn der Sensor in Watt (W) misst.
+      default: true
+      selector:
+        boolean: {}
+
+    notify_service:
+      name: Benachrichtigungs-Dienst (optional)
+      description: >
+        Name des notify-Dienstes für Benachrichtigungen beim Starten des Ladens.
+        Beispiele: notify.mobile_app_iphone, notify.telegram
+        Leer lassen für keine Benachrichtigung.
+      default: ""
+      selector:
+        text: {}
+
+variables:
+  phases_count: !input phases
+  feedin_entity: !input feedin_sensor
+  soc_entity: !input soc_sensor
+  soc_threshold_entity: !input soc_threshold_helper
+  puffer_w: !input puffer_watt
+  start_threshold_w: !input start_threshold_watts
+  zeitfenster: !input zeitfenster_aktiv
+  start_time_v: !input start_time
+  end_time_v: !input end_time
+  notify_svc: !input notify_service
+  sensor_kw: !input sensor_in_kw
+  kw_multiplier: "{{ 1000 if sensor_kw else 1 }}"
+
+trigger:
+  # Template-Trigger: konvertiert kW → W über kw_multiplier und wartet start_delay
+  - platform: template
+    alias: "Einspeisung über Startschwelle"
+    value_template: >
+      {{ states(feedin_entity) | float(0) * kw_multiplier >= (start_threshold_w + puffer_w) }}
+    for: !input start_delay
+
+  # Fallback: Prüft alle 5 Min. ob Überschuss vorhanden ist.
+  # Greift wenn der Übergang bereits stattfand bevor die Automation aktiviert wurde.
+  - platform: time_pattern
+    minutes: "/5"
+
+condition:
+  - condition: state
+    entity_id: !input mode_selector
+    state: "Überschussladen"
+
+  - condition: template
+    alias: "Einspeisung aktuell über Startschwelle"
+    value_template: >
+      {{ states(feedin_entity) | float(0) * kw_multiplier >= (start_threshold_w + puffer_w) }}
+
+  - condition: template
+    alias: "PV-Batterie SOC über Schwellwert"
+    value_template: >
+      {{ states(soc_entity) | float(0) >= states(soc_threshold_entity) | float(0) }}
+
+  - condition: state
+    entity_id: !input wallbox_switch
+    state: "off"
+
+  - condition: template
+    alias: "Zeitfenster prüfen"
+    value_template: >
+      {% if not zeitfenster %}
+        true
+      {% else %}
+        {{ today_at(start_time_v) <= now() <= today_at(end_time_v) }}
+      {% endif %}
+
+action:
+  - variables:
+      feedin_w: "{{ states(feedin_entity) | float(0) * kw_multiplier }}"
+      divisor: "{{ phases_count | int * 230 }}"
+      target_amps: "{{ [[(feedin_w - puffer_w) / divisor, 6] | max, 32] | min | int }}"
+
+  - service: number.set_value
+    target:
+      entity_id: !input wallbox_charge_amps
+    data:
+      value: "{{ target_amps }}"
+
+  - service: switch.turn_on
+    target:
+      entity_id: !input wallbox_switch
+
+  - if:
+      - condition: template
+        value_template: "{{ notify_svc != '' }}"
+    then:
+      - service: "{{ notify_svc }}"
+        data:
+          title: "⚡ Wallbox: Überschussladen gestartet"
+          message: "Laden mit {{ target_amps }}A gestartet (Einspeisung: {{ feedin_w | int }}W)."
+
+mode: single
