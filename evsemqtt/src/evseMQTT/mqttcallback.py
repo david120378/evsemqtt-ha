@@ -1,5 +1,6 @@
 import json
 import asyncio
+import time
 from .constants import Constants
 
 class MQTTCallback:
@@ -7,6 +8,7 @@ class MQTTCallback:
         self.device = device
         self.commands = commands
         self.logger = self.commands.logger # Hacky - but ... does it work? Passing logger to the class, will create duplicate log lines
+        self._restart_cooldown_until = 0  # epoch timestamp — no restart before this time
     
     async def delegate(self, client, userdata, message):
         # Decode and convert the JSON string to a dictionary
@@ -35,7 +37,12 @@ class MQTTCallback:
             # If the wallbox is actively charging, set_config_output_amps alone does not
             # affect the running session (the amps were baked into set_charge_start).
             # Stop and restart with the new value so the change takes effect immediately.
+            # A cooldown prevents cascading restarts when PV output fluctuates rapidly.
             if self.device.charge.get('output_state') == "Charging":
+                if time.time() < self._restart_cooldown_until:
+                    remaining = int(self._restart_cooldown_until - time.time())
+                    self.logger.info(f"Restart cooldown active ({remaining} s remaining) — skipping restart for {value} A.")
+                    return
                 self.logger.info(f"Charging active — restarting session with {value} A.")
                 await self.commands.set_charge_stop()
 
@@ -58,6 +65,8 @@ class MQTTCallback:
 
                 await asyncio.sleep(1)
                 await self.commands.set_charge_start(int(value))
+                self._restart_cooldown_until = time.time() + 60  # 60 s cooldown after restart
+                self.logger.info(f"Restart cooldown set for 60 s.")
 
             # Re-issue get_config_output_amps to retrieve the data and put in device.config
             await self.commands.get_config_output_amps()

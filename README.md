@@ -211,6 +211,11 @@ Sobald das Addon läuft und die Wallbox erkannt wurde, erscheint unter
 
 ## Changelog
 
+### v0.2.10 — 2026-04-17
+**Verbesserung: Cooldown nach Neustart verhindert kaskadierte Unterbrechungen**
+
+- `mqttcallback.py`: Nach jedem Stop+Restart gilt 60 Sekunden Cooldown. Weitere Amp-Änderungen in diesem Zeitfenster werden ignoriert (nur `set_config_output_amps` wird gesetzt, kein weiterer Neustart). Verhindert, dass bei schwankender PV-Leistung die Wallbox mehr Zeit mit Stoppen/Starten verbringt als mit Laden.
+
 ### v0.2.9 — 2026-04-17
 **Bugfix: Korrekte Bereitschaftserkennung nach charge_stop**
 
