@@ -211,6 +211,11 @@ Sobald das Addon läuft und die Wallbox erkannt wurde, erscheint unter
 
 ## Changelog
 
+### v0.2.9 — 2026-04-17
+**Bugfix: Korrekte Bereitschaftserkennung nach charge_stop**
+
+- `mqttcallback.py`: Die Bedingung für „Wallbox bereit" wurde präzisiert: es muss sowohl `output_state == "Idle"` (Relais offen) als auch `current_state == "Charging"` (CP-Leitung in State C — Fahrzeug fordert aktiv Laden an) gelten. Direkt nach dem Stop meldet die Wallbox einen transienten Zustand (`current_state == "Unknown 7"`, L2/L3-Spannung = 0), in dem `set_charge_start` abgelehnt wird. Die Stabilisierung auf den echten Bereitschaftszustand dauert ca. 7 Sekunden.
+
 ### v0.2.8 — 2026-04-17
 **Bugfix: Warte auf output_state == "Idle" vor charge_start**
 
