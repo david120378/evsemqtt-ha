@@ -211,6 +211,11 @@ Sobald das Addon läuft und die Wallbox erkannt wurde, erscheint unter
 
 ## Changelog
 
+### v0.2.5 — 2026-04-17
+**Bugfix: Ladestromänderung während aktiver Ladesession**
+
+- `mqttcallback.py`: Wenn der Ladestrom (`charge_amps`) während eines aktiven Ladevorgangs geändert wird, stoppt der Add-on die Ladesession kurz und startet sie mit dem neuen Ampere-Wert neu. Bisher wurde nur `set_config_output_amps` (cmd 33031) gesendet, was die laufende Session nicht beeinflusst — der neue Wert wurde erst bei der nächsten Session übernommen.
+
 ### v0.2.4 — 2026-04-16
 **Bugfix & Dokumentation: Abhängigkeiten vervollständigt**
 

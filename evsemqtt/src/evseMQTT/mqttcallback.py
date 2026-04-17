@@ -1,4 +1,5 @@
 import json
+import asyncio
 from .constants import Constants
 
 class MQTTCallback:
@@ -30,7 +31,16 @@ class MQTTCallback:
             self.logger.info(f"Setting charge amps to {value}.")
             self.device.config = payload
             await self.commands.set_config_output_amps(value)
-            
+
+            # If the wallbox is actively charging, set_config_output_amps alone does not
+            # affect the running session (the amps were baked into set_charge_start).
+            # Stop and restart with the new value so the change takes effect immediately.
+            if self.device.charge.get('output_state') == "Charging":
+                self.logger.info(f"Charging active — restarting session with {value} A.")
+                await self.commands.set_charge_stop()
+                await asyncio.sleep(1)
+                await self.commands.set_charge_start(int(value))
+
             # Re-issue get_config_output_amps to retrieve the data and put in device.config
             await self.commands.get_config_output_amps()
             
