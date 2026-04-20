@@ -30,8 +30,6 @@ action:
   - action: automation.turn_off
     target:
       entity_id:
-        - automation.wallbox_notfall_laden
-        - automation.wallbox_notfall_laden_mini
         - automation.wallbox_uberschussladen_starten
         - automation.wallbox_uberschussladen_stoppen
         - automation.wallbox_wetter_vorschau_nachtladung
