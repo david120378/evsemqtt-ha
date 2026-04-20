@@ -138,8 +138,6 @@ Im Ordner [`automations/`](automations/) liegen alle Wallbox-Automationen als YA
 | [`wallbox_uberschussladen_starten.yaml`](automations/wallbox_uberschussladen_starten.yaml) | Startet Laden bei ausreichend PV-Überschuss |
 | [`wallbox_uberschussladen_stoppen.yaml`](automations/wallbox_uberschussladen_stoppen.yaml) | Stoppt Laden wenn Überschuss oder SOC-Ziel nicht mehr erreicht |
 | [`wallbox_uberschussladen_ampere_anpassen.yaml`](automations/wallbox_uberschussladen_ampere_anpassen.yaml) | Passt Ladestrom dynamisch an verfügbaren PV-Überschuss an |
-| [`wallbox_notfall_laden_tesla.yaml`](automations/wallbox_notfall_laden_tesla.yaml) | Notfall-Laden Tesla: startet bei SOC unter Schwellwert |
-| [`wallbox_notfall_laden_mini.yaml`](automations/wallbox_notfall_laden_mini.yaml) | Notfall-Laden Mini Aceman: startet bei SOC unter Schwellwert |
 | [`wallbox_wetter_vorschau_nachtladung.yaml`](automations/wallbox_wetter_vorschau_nachtladung.yaml) | Nächtliches Laden bei schlechter PV-Wettervorhersage |
 | [`wallbox_watchdog.yaml`](automations/wallbox_watchdog.yaml) | Startet evseMQTT Add-on neu bei Verbindungsverlust (>5 min) |
 | [`schalter_uberschussladen_aktivieren.yaml`](automations/schalter_uberschussladen_aktivieren.yaml) | Aktiviert Überschussladen-Modus und alle zugehörigen Automationen |
@@ -174,7 +172,6 @@ Alternativ: Den Ordner `blueprints/automation/david120378/` in den HA-Konfigurat
 | Überschussladen – Starten | [`wallbox_surplus_start.yaml`](blueprints/automation/david120378/wallbox_surplus_start.yaml) | Startet Laden bei ausreichend PV-Überschuss und SOC über Schwellwert |
 | Überschussladen – Ampere | [`wallbox_surplus_amps.yaml`](blueprints/automation/david120378/wallbox_surplus_amps.yaml) | Passt Ladestrom dynamisch an verfügbaren PV-Überschuss an (nur bei ≥3A Änderung) |
 | Überschussladen – Stoppen | [`wallbox_surplus_stop.yaml`](blueprints/automation/david120378/wallbox_surplus_stop.yaml) | Stoppt Laden bei zu wenig Überschuss, SOC-Unterschreitung oder Auto-Ziel-SOC |
-| Notfall-Laden | [`wallbox_notfall.yaml`](blueprints/automation/david120378/wallbox_notfall.yaml) | Notfall-Laden wenn Auto-SOC unter Schwellwert fällt (unabhängig vom Lademodus) |
 | Wetter-Nachtladung | [`wallbox_wetter.yaml`](blueprints/automation/david120378/wallbox_wetter.yaml) | Nächtliches Laden bei schlechter PV-Wettervorhersage für den nächsten Tag |
 
 ### Zusammenspiel der Blueprints
@@ -184,7 +181,6 @@ Alternativ: Den Ordner `blueprints/automation/david120378/` in den HA-Konfigurat
 [wallbox_surplus_start]  → startet Überschussladen
 [wallbox_surplus_amps]   → regelt Ladestrom laufend nach
 [wallbox_surplus_stop]   → stoppt Überschussladen
-[wallbox_notfall]        → Notfall-Laden (unabhängig vom Modus)
 [wallbox_wetter]         → Nachtladung bei Schlechtwetter
 ```
 
