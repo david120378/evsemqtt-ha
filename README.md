@@ -248,6 +248,11 @@ Sobald das Addon läuft und die Wallbox erkannt wurde, erscheint unter
 
 ## Changelog
 
+### v0.3.2 — 2026-04-21
+**Fix: build.yaml entfernt**
+
+- `build.yaml` entfernt — vom HA Supervisor als deprecated markiert. Build-Parameter werden durch Supervisor-Defaults geliefert (`ARG BUILD_FROM` im Dockerfile).
+
 ### v0.3.1 — 2026-04-21
 **Fix: Veraltete Architekturen aus config.yaml entfernt**
 
