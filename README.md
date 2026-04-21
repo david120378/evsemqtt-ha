@@ -248,10 +248,15 @@ Sobald das Addon läuft und die Wallbox erkannt wurde, erscheint unter
 
 ## Changelog
 
+### v0.3.3 — 2026-04-21
+**Fix: Dockerfile auf BUILD_ARCH umgestellt**
+
+- `Dockerfile`: `ARG BUILD_FROM` / `FROM $BUILD_FROM` ersetzt durch `ARG BUILD_ARCH` / `FROM ghcr.io/home-assistant/${BUILD_ARCH}-base:latest`. Der Supervisor übergibt `BUILD_FROM` nur noch wenn `build.yaml` vorhanden ist — `BUILD_ARCH` wird immer übergeben.
+
 ### v0.3.2 — 2026-04-21
 **Fix: build.yaml entfernt**
 
-- `build.yaml` entfernt — vom HA Supervisor als deprecated markiert. Build-Parameter werden durch Supervisor-Defaults geliefert (`ARG BUILD_FROM` im Dockerfile).
+- `build.yaml` entfernt — vom HA Supervisor als deprecated markiert.
 
 ### v0.3.1 — 2026-04-21
 **Fix: Veraltete Architekturen aus config.yaml entfernt**
