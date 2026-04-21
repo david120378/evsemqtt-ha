@@ -248,6 +248,11 @@ Sobald das Addon läuft und die Wallbox erkannt wurde, erscheint unter
 
 ## Changelog
 
+### v0.3.1 — 2026-04-21
+**Fix: Veraltete Architekturen aus config.yaml entfernt**
+
+- `arch`: `armhf`, `armv7` und `i386` entfernt — vom HA Supervisor als deprecated markiert. Unterstützte Architekturen: `aarch64`, `amd64`.
+
 ### v0.3.0 — 2026-04-17
 **Neu: Blueprints ins Addon-Repository integriert + Stabilitätsverbesserung Ampere-Regelung**
 
