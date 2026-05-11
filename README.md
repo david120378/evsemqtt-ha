@@ -139,7 +139,7 @@ Im Ordner [`automations/`](automations/) liegen alle Wallbox-Automationen als YA
 | [`wallbox_uberschussladen_stoppen.yaml`](automations/wallbox_uberschussladen_stoppen.yaml) | Stoppt Laden wenn Überschuss oder SOC-Ziel nicht mehr erreicht |
 | [`wallbox_uberschussladen_ampere_anpassen.yaml`](automations/wallbox_uberschussladen_ampere_anpassen.yaml) | Passt Ladestrom dynamisch an verfügbaren PV-Überschuss an |
 | [`wallbox_wetter_vorschau_nachtladung.yaml`](automations/wallbox_wetter_vorschau_nachtladung.yaml) | Nächtliches Laden bei schlechter PV-Wettervorhersage |
-| [`wallbox_watchdog.yaml`](automations/wallbox_watchdog.yaml) | Startet evseMQTT Add-on neu bei Verbindungsverlust (>5 min) |
+| [`wallbox_watchdog.yaml`](automations/wallbox_watchdog.yaml) | Startet evseMQTT Add-on neu bei Verbindungsverlust (kein MQTT-Update >20 min) |
 | [`schalter_uberschussladen_aktivieren.yaml`](automations/schalter_uberschussladen_aktivieren.yaml) | Aktiviert Überschussladen-Modus und alle zugehörigen Automationen |
 | [`schalter_uberschussladen_deaktivieren.yaml`](automations/schalter_uberschussladen_deaktivieren.yaml) | Deaktiviert Überschussladen-Modus und alle zugehörigen Automationen |
 
@@ -247,6 +247,11 @@ Sobald das Addon läuft und die Wallbox erkannt wurde, erscheint unter
 ---
 
 ## Changelog
+
+### v0.3.4 — 2026-05-11
+**Fix: Watchdog-Automation robuster gestaltet**
+
+- `automations/wallbox_watchdog.yaml`: Trigger von `to: unavailable, for: 5 min` auf `time_pattern` (alle 10 Minuten) mit `last_updated > 20 min`-Bedingung umgestellt. Der `unavailable`-Trigger greift nur wenn `expire_after` in der aktiven MQTT-Discovery-Config enthalten ist — was beim ersten Start nach einer Neuinstallation zunächst nicht der Fall ist (alte retained Config im MQTT-Broker). Der `last_updated`-Check funktioniert zuverlässig unabhängig davon, da die Wallbox alle ~15 s MQTT-Updates sendet und `last_updated` bei ausbleibenden Updates sichtbar veraltet.
 
 ### v0.3.3 — 2026-04-21
 **Fix: Dockerfile auf BUILD_ARCH umgestellt**
