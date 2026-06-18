@@ -1,7 +1,11 @@
 # ============================================================
 # Blueprint: Wallbox – Überschussladen – Ampere anpassen
-# Version:   0.3.0
+# Version:   0.4.0
 # Changelog:
+#   0.4.0 – Hybrid-WR-Akkuschutz: neuer optionaler Input battery_discharge_sensor.
+#            Wenn ein Hausakku gerade entlädt, wird dessen Leistung vom verfügbaren
+#            Überschuss abgezogen — so lädt die Wallbox nicht auf Kosten des Akkus.
+#            3A-Stabilitätsfilter und alle bestehenden Inputs unverändert.
 #   0.3.0 – Stabilisierung: number.set_value wird nur gesetzt wenn sich der
 #            Ladestrom um mindestens 3A ändert (vorher: immer bei Einspeisung-
 #            Änderung). Verhindert ständige Stop/Start-Zyklen der Wallbox bei
@@ -22,13 +26,16 @@ blueprint:
     solange der Modus "Überschussladen" aktiv ist und geladen wird.
 
     **Berechnung:**
-    (Einspeisung + Ladeleistung − Netzbezug − Großverbraucher − Puffer) / (Phasen × 230V)
+    (Einspeisung + Ladeleistung − Netzbezug − Großverbraucher − Akkuentladung − Puffer) / (Phasen × 230V)
 
     - **Einspeisung-Puffer:** Stabilisiert die Regelung bei schwankender Solarproduktion.
     - **Netzbezug-Sensor (optional):** FOX-ESS Grid-Consumption Sensor. Berücksichtigt
       aktuelle Netzentnahme anderer Verbraucher im Haushalt.
     - **Großverbraucher-Sensor (optional):** Summiert die Leistung weiterer
       Großverbraucher (z.B. Wärmepumpe + Geschirrspüler) als Template-Sensor.
+    - **Akku-Entladung-Sensor (optional):** Sensor für die aktuelle Entladeleistung
+      des Hausspeichers. Wird vom Überschuss abgezogen, damit die Wallbox nicht
+      auf Kosten des Akkus lädt (Hybrid-Wechselrichter-Schutz).
 
     **Mindestladestrom:** 6A. **Maximum:** 32A.
 
@@ -114,6 +121,18 @@ blueprint:
       selector:
         text: {}
 
+    battery_discharge_sensor:
+      name: Akku-Entladung-Sensor (optional)
+      description: >
+        Entity-ID eines Sensors der die aktuelle Entladeleistung des Hausspeichers
+        in Watt anzeigt (z.B. sensor.fox_ess_bat_discharge_power).
+        Wenn angegeben, wird die Akkuentladung vom verfügbaren Überschuss abgezogen —
+        die Wallbox lädt dann nicht auf Kosten des Akkus (Hybrid-WR-Schutz).
+        Leer lassen wenn nicht vorhanden.
+      default: ""
+      selector:
+        text: {}
+
     extra_load_sensor:
       name: Großverbraucher-Sensor (optional)
       description: >
@@ -150,6 +169,7 @@ variables:
   wallbox_charge_amps_entity: !input wallbox_charge_amps
   puffer_w: !input puffer_watt
   grid_entity: !input grid_sensor
+  battery_entity: !input battery_discharge_sensor
   extra_entity: !input extra_load_sensor
   notify_svc: !input notify_service
   sensor_kw: !input sensor_in_kw
@@ -173,10 +193,11 @@ action:
       feedin_w: "{{ states(feedin_entity) | float(0) * kw_multiplier }}"
       current_charge_w: "{{ states(energy_entity) | float(0) }}"
       grid_w: "{{ states(grid_entity) | float(0) * kw_multiplier if grid_entity != '' else 0 }}"
+      battery_w: "{{ states(battery_entity) | float(0) if battery_entity != '' else 0 }}"
       extra_w: "{{ states(extra_entity) | float(0) if extra_entity != '' else 0 }}"
       divisor: "{{ phases_count | int * 230 }}"
-      # Gesamtüberschuss: Einspeisung + Eigene Ladeleistung - Netzbezug - Großverbraucher - Puffer
-      available_w: "{{ feedin_w + current_charge_w - grid_w - extra_w - puffer_w }}"
+      # Gesamtüberschuss: Einspeisung + Eigene Ladeleistung - Netzbezug - Akkuentladung - Großverbraucher - Puffer
+      available_w: "{{ feedin_w + current_charge_w - grid_w - battery_w - extra_w - puffer_w }}"
       target_amps: "{{ [[available_w / divisor, 6] | max, 32] | min | int }}"
       current_amps: "{{ states(wallbox_charge_amps_entity) | float(0) }}"
 

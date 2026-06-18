@@ -170,7 +170,7 @@ Alternativ: Den Ordner `blueprints/automation/david120378/` in den HA-Konfigurat
 |-----------|-------|-------------|
 | Lademodus-Steuerung | [`wallbox_modus.yaml`](blueprints/automation/david120378/wallbox_modus.yaml) | Schaltet Wallbox bei Modus „Off" aus, bei „Manuell" auf konfigurierbaren Strom ein |
 | Überschussladen – Starten | [`wallbox_surplus_start.yaml`](blueprints/automation/david120378/wallbox_surplus_start.yaml) | Startet Laden bei ausreichend PV-Überschuss und SOC über Schwellwert |
-| Überschussladen – Ampere | [`wallbox_surplus_amps.yaml`](blueprints/automation/david120378/wallbox_surplus_amps.yaml) | Passt Ladestrom dynamisch an verfügbaren PV-Überschuss an (nur bei ≥3A Änderung) |
+| Überschussladen – Ampere | [`wallbox_surplus_amps.yaml`](blueprints/automation/david120378/wallbox_surplus_amps.yaml) | Passt Ladestrom dynamisch an verfügbaren PV-Überschuss an (nur bei ≥3A Änderung); optionaler Akku-Entladung-Sensor schützt Hausspeicher (v0.4.0) |
 | Überschussladen – Stoppen | [`wallbox_surplus_stop.yaml`](blueprints/automation/david120378/wallbox_surplus_stop.yaml) | Stoppt Laden bei zu wenig Überschuss, SOC-Unterschreitung oder Auto-Ziel-SOC |
 | Wetter-Nachtladung | [`wallbox_wetter.yaml`](blueprints/automation/david120378/wallbox_wetter.yaml) | Nächtliches Laden bei schlechter PV-Wettervorhersage für den nächsten Tag |
 
@@ -247,6 +247,11 @@ Sobald das Addon läuft und die Wallbox erkannt wurde, erscheint unter
 ---
 
 ## Changelog
+
+### v0.4.0 — 2026-06-18
+**Neu: Hybrid-WR-Akkuschutz in Überschuss-Ampere-Regelung**
+
+- `blueprints/automation/david120378/wallbox_surplus_amps.yaml` (v0.4.0): Neuer optionaler Input `battery_discharge_sensor`. Wenn ein Hausspeicher gerade entlädt, wird dessen aktuelle Entladeleistung vom verfügbaren PV-Überschuss abgezogen — die Wallbox lädt damit nicht auf Kosten des Akkus (relevant für Hybrid-Wechselrichter wie FOX-ESS). 3A-Stabilitätsfilter und alle bestehenden Inputs unverändert.
 
 ### v0.3.4 — 2026-05-11
 **Fix: Watchdog-Automation robuster gestaltet**
