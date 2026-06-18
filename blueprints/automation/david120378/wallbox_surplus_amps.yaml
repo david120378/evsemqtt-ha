@@ -1,7 +1,9 @@
 # ============================================================
 # Blueprint: Wallbox – Überschussladen – Ampere anpassen
-# Version:   0.4.0
+# Version:   0.4.1
 # Changelog:
+#   0.4.1 – Bugfix: fehlendes kw_multiplier bei battery_w ergänzt – Akku-Term
+#            wurde in kW statt W gerechnet, der Abzug war dadurch wirkungslos.
 #   0.4.0 – Hybrid-WR-Akkuschutz: neuer optionaler Input battery_discharge_sensor.
 #            Wenn ein Hausakku gerade entlädt, wird dessen Leistung vom verfügbaren
 #            Überschuss abgezogen — so lädt die Wallbox nicht auf Kosten des Akkus.
@@ -193,7 +195,7 @@ action:
       feedin_w: "{{ states(feedin_entity) | float(0) * kw_multiplier }}"
       current_charge_w: "{{ states(energy_entity) | float(0) }}"
       grid_w: "{{ states(grid_entity) | float(0) * kw_multiplier if grid_entity != '' else 0 }}"
-      battery_w: "{{ states(battery_entity) | float(0) if battery_entity != '' else 0 }}"
+      battery_w: "{{ states(battery_entity) | float(0) * kw_multiplier if battery_entity != '' else 0 }}"
       extra_w: "{{ states(extra_entity) | float(0) if extra_entity != '' else 0 }}"
       divisor: "{{ phases_count | int * 230 }}"
       # Gesamtüberschuss: Einspeisung + Eigene Ladeleistung - Netzbezug - Akkuentladung - Großverbraucher - Puffer

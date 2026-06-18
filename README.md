@@ -248,6 +248,11 @@ Sobald das Addon läuft und die Wallbox erkannt wurde, erscheint unter
 
 ## Changelog
 
+### v0.4.1 — 2026-06-18
+**Bugfix: Einheit beim Akku-Term korrigiert**
+
+- `wallbox_surplus_amps.yaml` (v0.4.1): `battery_w` wird jetzt mit `kw_multiplier` multipliziert. Der Akku-Term wurde zuvor in kW statt W berechnet, wodurch der Abzug der PV-Akku-Entladung praktisch wirkungslos war (≈6 W statt ≈5800 W). Jetzt greift der Hausakku-Schutz wie vorgesehen.
+
 ### v0.4.0 — 2026-06-18
 **Neu: Hybrid-WR-Akkuschutz in Überschuss-Ampere-Regelung**
 
