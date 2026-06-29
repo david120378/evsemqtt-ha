@@ -171,7 +171,7 @@ Alternativ: Den Ordner `blueprints/automation/david120378/` in den HA-Konfigurat
 | Lademodus-Steuerung | [`wallbox_modus.yaml`](blueprints/automation/david120378/wallbox_modus.yaml) | Schaltet Wallbox bei Modus „Off" aus, bei „Manuell" auf konfigurierbaren Strom ein |
 | Überschussladen – Starten | [`wallbox_surplus_start.yaml`](blueprints/automation/david120378/wallbox_surplus_start.yaml) | Startet Laden bei ausreichend PV-Überschuss und SOC über Schwellwert |
 | Überschussladen – Ampere | [`wallbox_surplus_amps.yaml`](blueprints/automation/david120378/wallbox_surplus_amps.yaml) | Passt Ladestrom dynamisch an verfügbaren PV-Überschuss an (nur bei ≥3A Änderung); optionaler Akku-Entladung-Sensor schützt Hausspeicher (v0.4.0) |
-| Überschussladen – Stoppen | [`wallbox_surplus_stop.yaml`](blueprints/automation/david120378/wallbox_surplus_stop.yaml) | Stoppt Laden bei zu wenig Überschuss, SOC-Unterschreitung oder Auto-Ziel-SOC |
+| Überschussladen – Stoppen | [`wallbox_surplus_stop.yaml`](blueprints/automation/david120378/wallbox_surplus_stop.yaml) | Stoppt Laden bei zu wenig Überschuss, SOC-Unterschreitung, Auto-Ziel-SOC oder Wallbox-Leerlauf (v0.3.0) |
 | Wetter-Nachtladung | [`wallbox_wetter.yaml`](blueprints/automation/david120378/wallbox_wetter.yaml) | Nächtliches Laden bei schlechter PV-Wettervorhersage für den nächsten Tag |
 
 ### Zusammenspiel der Blueprints
@@ -247,6 +247,11 @@ Sobald das Addon läuft und die Wallbox erkannt wurde, erscheint unter
 ---
 
 ## Changelog
+
+### v0.4.2 — 2026-06-29
+**Neu: Fahrzeugunabhängiger Leerlauf-Stopp im Stopp-Blueprint**
+
+- `blueprints/automation/david120378/wallbox_surplus_stop.yaml` (v0.3.0): Neuer optionaler Stopp-Pfad `car_idle` — stoppt das Laden wenn der Lade-Schalter an ist, der wallbox-eigene `output_state`-Sensor aber `Idle` meldet (kein Ladestrom). Behebt, dass der Schalter auf `on` hängen blieb wenn das Auto von selbst fertig lud. State-basierte Bedingung (nicht nur Trigger-Flanke) damit auch der time_pattern-Fallback greift. Neue Inputs: `idle_state_sensor`, `idle_state_value`, `idle_stop_delay` — alle optional, abwärtskompatibel.
 
 ### v0.4.1 — 2026-06-18
 **Bugfix: Einheit beim Akku-Term korrigiert**

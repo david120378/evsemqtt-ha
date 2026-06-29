@@ -1,3 +1,7 @@
+## v0.4.2 — 2026-06-29
+**Neu: Fahrzeugunabhängiger Leerlauf-Stopp**
+`wallbox_surplus_stop.yaml` (v0.3.0): Neuer optionaler Stopp-Pfad über `output_state == Idle`. Behebt, dass der Lade-Schalter auf `on` hängen blieb wenn das Auto von selbst fertig lud. Neue optionale Inputs: `idle_state_sensor`, `idle_state_value`, `idle_stop_delay`.
+
 ## v0.4.1 — 2026-06-18
 **Bugfix: Einheit beim Akku-Term korrigiert**
 `battery_w` wird jetzt mit `kw_multiplier` multipliziert. Der Akku-Term wurde zuvor in kW statt W berechnet, wodurch der Abzug der PV-Akku-Entladung praktisch wirkungslos war (≈6 W statt ≈5800 W).
