@@ -1,7 +1,19 @@
 # ============================================================
 # Blueprint: Wallbox – Überschussladen – Stoppen
-# Version:   0.2.4
+# Version:   0.3.0
 # Changelog:
+#   0.3.0 – Neuer Stopp-Pfad "Wallbox im Leerlauf" (FAHRZEUGUNABHÄNGIG):
+#            Stoppt das Laden wenn der Lade-Schalter an ist, der wallbox-eigene
+#            Status-Sensor (z.B. evsemqtt 'output_state') aber 'Leerlauf' meldet
+#            – d.h. es fließt real kein Ladestrom (Auto voll / beendet / abgesteckt).
+#            Bewusst als STATE-basierte Bedingung umgesetzt, damit der
+#            time_pattern-Fallback sie ebenfalls auswertet → schließt die
+#            Flanken-Taubheit (Trigger feuert nur bei Übergang). Schleifensicher,
+#            weil bei echtem Laden der Status nicht 'Leerlauf' ist.
+#            Behebt: Schalter blieb auf 'on' hängen, wenn das Auto von selbst
+#            fertig wurde, ohne dass eine andere Stopbedingung griff.
+#            (stop_delay zusätzlich als Variable, damit die Notify-Meldung korrekt
+#            rendert.)
 #   0.2.4 – Bugfix: time_pattern stoppte Laden während Wallbox lädt (Einspeisung
 #            fällt beim Laden unter Stoppschwelle → Loop). time_pattern prüft
 #            jetzt nur noch SOC/Auto-Bedingungen; Einspeisung wird nur via
@@ -20,8 +32,9 @@ blueprint:
   description: >
     Stoppt das Laden wenn:
     - zu wenig Solar-Überschuss vorhanden ist (mit Hysterese),
-    - der PV-Batterie-SOC unter den Schwellwert fällt, oder
-    - das Auto seinen Ziel-SOC erreicht hat.
+    - der PV-Batterie-SOC unter den Schwellwert fällt,
+    - das Auto seinen Ziel-SOC erreicht hat, oder
+    - die Wallbox im Leerlauf ist (Schalter an, aber kein Ladestrom).
 
     **Ausschalt-Hysterese (Einspeisung):** Das Laden stoppt erst wenn die Einspeisung
     für eine konfigurierbare Zeit (Standard: 5 Minuten) unter der Stoppschwelle bleibt.
@@ -30,6 +43,11 @@ blueprint:
     **Mindest-SOC Auto (optional):** Pro Auto konfigurierbar. Laden stoppt automatisch
     wenn das Auto den eingestellten Ziel-SOC erreicht (z.B. 80% zum Akku-Schutz).
     Für jedes Auto eine eigene Automation aus diesem Blueprint erstellen.
+
+    **Leerlauf-Erkennung (optional, fahrzeugunabhängig):** Stoppt das Laden wenn der
+    Schalter an ist, der wallbox-eigene Status-Sensor (z.B. evsemqtt 'output_state')
+    aber den Leerlauf-Wert anzeigt. Fängt den Fall ab, dass das Auto von selbst fertig
+    ist (z.B. eigenes Ladelimit erreicht), ohne ein Fahrzeug-Signal zu benötigen.
 
     Wird zusammen mit "Modus-Steuerung", "Starten" und "Ampere anpassen" verwendet.
   domain: automation
@@ -128,6 +146,37 @@ blueprint:
           step: 5
           unit_of_measurement: "%"
 
+    idle_state_sensor:
+      name: Wallbox Lade-Status Sensor (optional, fahrzeugunabhängig)
+      description: >
+        Wallbox-eigener Status-Sensor der meldet, ob gerade geladen wird
+        (z.B. evsemqtt 'output_state'). Stoppt das Laden wenn der Schalter an ist,
+        dieser Status aber den unten konfigurierten Leerlauf-Wert anzeigt –
+        d.h. real fließt kein Ladestrom (Auto voll / beendet / abgesteckt).
+        Komplett fahrzeugunabhängig. Leer lassen zum Deaktivieren.
+      default: ""
+      selector:
+        entity:
+          domain: sensor
+
+    idle_state_value:
+      name: Leerlauf-Status Wert
+      description: >
+        Der Zustandswert des Status-Sensors oben, der "es fließt kein Ladestrom"
+        bedeutet. Bei evsemqtt (output_state): "Idle".
+      default: "Idle"
+      selector:
+        text: {}
+
+    idle_stop_delay:
+      name: Ausschalt-Verzögerung (Leerlauf)
+      description: >
+        Wie lange der Leerlauf-Status ununterbrochen anliegen muss bevor gestoppt wird.
+        Schützt vor kurzen Ladepausen (Phasenumschaltung, Aufwachen). Standard: 5 Minuten.
+      default: "00:05:00"
+      selector:
+        duration: {}
+
     sensor_in_kw:
       name: Sensor-Einheit kW
       description: >
@@ -153,9 +202,12 @@ variables:
   car_soc_max_v: !input car_soc_max
   feedin_entity: !input feedin_sensor
   stop_threshold_w: !input stop_threshold_watts
+  stop_delay: !input stop_delay
   notify_svc: !input notify_service
   sensor_kw: !input sensor_in_kw
   kw_multiplier: "{{ 1000 if sensor_kw else 1 }}"
+  idle_state_entity: !input idle_state_sensor
+  idle_state_val: !input idle_state_value
 
 trigger:
   # Template-Trigger: konvertiert kW → W über kw_multiplier und wartet stop_delay
@@ -181,6 +233,14 @@ trigger:
     for: "00:01:00"
     id: car_full
 
+  # Leerlauf-Trigger (fahrzeugunabhängig): Schalter an, aber Wallbox liefert nichts.
+  - platform: template
+    alias: "Wallbox im Leerlauf (kein Ladestrom)"
+    value_template: >
+      {{ idle_state_entity != '' and is_state(idle_state_entity, idle_state_val) }}
+    for: !input idle_stop_delay
+    id: car_idle
+
   # Fallback: Prüft alle 5 Min. ob eine Stopbedingung erfüllt ist.
   # Greift wenn der Übergang bereits stattfand bevor die Automation aktiviert wurde.
   - platform: time_pattern
@@ -200,7 +260,8 @@ condition:
     value_template: >
       {{ trigger.id == 'feedin_low'
          or (states(soc_entity) | float(0) < states(soc_threshold_entity) | float(0))
-         or (car_soc_entity != '' and states(car_soc_entity) | float(100) >= car_soc_max_v) }}
+         or (car_soc_entity != '' and states(car_soc_entity) | float(100) >= car_soc_max_v)
+         or (idle_state_entity != '' and is_state(idle_state_entity, idle_state_val)) }}
 
 action:
   - service: switch.turn_off
@@ -217,10 +278,14 @@ action:
           message: >
             {% if trigger.id == 'car_full' %}
               Auto hat {{ car_soc_max_v }}% erreicht. Laden gestoppt.
+            {% elif trigger.id == 'car_idle' %}
+              Wallbox im Leerlauf (kein Ladestrom). Laden gestoppt.
             {% elif trigger.id == 'feedin_low' %}
               Zu wenig Solar-Überschuss für mehr als {{ stop_delay }}. Laden gestoppt.
-            {% else %}
+            {% elif (states(soc_entity) | float(0) < states(soc_threshold_entity) | float(0)) %}
               PV-Batterie unter Schwellwert. Laden gestoppt.
+            {% else %}
+              Stopbedingung erfüllt. Laden gestoppt.
             {% endif %}
 
 mode: single
