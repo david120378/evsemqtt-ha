@@ -248,6 +248,11 @@ Sobald das Addon läuft und die Wallbox erkannt wurde, erscheint unter
 
 ## Changelog
 
+### v0.4.3 — 2026-07-09
+**Fix: Watchdog-Neustartschleife durch last_updated-Heuristik behoben**
+
+- `automations/wallbox_watchdog.yaml`: Die in v0.3.4 eingeführte Zusatzbedingung `last_updated > 20 min` entfernt. `sensor.wallbox_evse_bs20_status` publiziert per MQTT nur bei Wertänderung — bleibt der Status länger als die Schwelle unverändert (normal bei Idle/abgeschlossener Ladung), tickt `last_updated` nicht, obwohl die Wallbox aktiv Heartbeats sendet. Der Watchdog hat das Addon dadurch alle ~10 Minuten grundlos neu gestartet, was jeweils eine kurze `unavailable`-Phase aller Entities beim MQTT-Reconnect verursacht hat. Bedingung jetzt ausschließlich `is_state(..., 'unavailable')` — deckt echte Verbindungsverluste ab, ohne False-Positives bei langen Idle-Phasen.
+
 ### v0.4.2 — 2026-06-29
 **Neu: Fahrzeugunabhängiger Leerlauf-Stopp im Stopp-Blueprint**
 
