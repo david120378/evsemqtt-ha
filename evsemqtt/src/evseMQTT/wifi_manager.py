@@ -3,6 +3,7 @@ import json
 import os
 import socket
 import struct
+import time
 
 # Discovery broadcast packet: header 06 01, length 25, keyType 0,
 # serial all-FF, password all-FF, cmd 0x0001 (LOGIN_BEACON), tail 0F 02.
@@ -205,7 +206,7 @@ class WiFiManager:
         # guaranteed to be bound to *this* loop.  Creating it in __init__ (outside
         # any async context) can bind it to a stale/different loop on Python 3.10+.
         self.queue = asyncio.Queue(5)
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         await loop.create_datagram_endpoint(
             lambda: _UDPProtocol(self),
             local_addr=("0.0.0.0", self.port),
@@ -216,7 +217,7 @@ class WiFiManager:
         )
         # Start the watchdog immediately so a wakeup is sent if the wallbox is
         # already silent at startup (e.g. after an HA restart).
-        self.last_message_time = asyncio.get_event_loop().time()
+        self.last_message_time = time.monotonic()
         self._schedule_reconnect_check()
         # Keep coroutine alive; actual work happens in datagram_received callbacks.
         while True:
@@ -236,7 +237,7 @@ class WiFiManager:
     # ------------------------------------------------------------------
 
     async def _on_datagram(self, data, addr):
-        self.last_message_time = asyncio.get_event_loop().time()
+        self.last_message_time = time.monotonic()
 
         if not self.connected:
             self.evse_addr = addr
@@ -289,14 +290,17 @@ class WiFiManager:
     def _schedule_reconnect_check(self):
         """Schedule the next watchdog check at the normal message_timeout interval."""
         self._cancel_reconnect()
-        self._reconnect_handle = asyncio.get_event_loop().call_later(
+        # get_running_loop() is safe here: called only from serve()/_on_datagram()
+        # (coroutines) or recursively from _check_reconnect() (a callback fired
+        # by the running loop), so a loop is always running at call time.
+        self._reconnect_handle = asyncio.get_running_loop().call_later(
             self.message_timeout, self._check_reconnect
         )
 
     def _schedule_retry(self):
         """Schedule the next wakeup retry at the faster reconnect_interval."""
         self._cancel_reconnect()
-        self._reconnect_handle = asyncio.get_event_loop().call_later(
+        self._reconnect_handle = asyncio.get_running_loop().call_later(
             self.reconnect_interval, self._check_reconnect
         )
 
@@ -369,7 +373,7 @@ class WiFiManager:
             self._schedule_reconnect_check()
             return
 
-        elapsed = asyncio.get_event_loop().time() - self.last_message_time
+        elapsed = time.monotonic() - self.last_message_time
 
         if elapsed >= self.message_timeout:
             # First time detecting a timeout: log + reset connection state.

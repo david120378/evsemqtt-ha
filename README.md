@@ -248,6 +248,14 @@ Sobald das Addon läuft und die Wallbox erkannt wurde, erscheint unter
 
 ## Changelog
 
+### v0.4.4 — 2026-07-10
+**Fix: BLE-Modus unter Python 3.14 abgestürzt (`RuntimeError: There is no current event loop`)**
+
+- `ble_manager.py`, `wifi_manager.py`, `mqttclient.py`: Alle 10 Vorkommen von `asyncio.get_event_loop()` ersetzt. In Python 3.14 erzeugt dieser Aufruf keinen impliziten Event-Loop mehr, wenn noch keiner läuft — `BLEManager.__init__` rief ihn aber synchron auf, *bevor* `asyncio.run()` in `main.py` überhaupt gestartet war, was den BLE-Modus vollständig unbenutzbar machte.
+  - Reine Zeitstempel-Zwecke (`last_message_time`, Timeout-Vergleiche in `_check_reconnect`): auf `time.monotonic()` umgestellt — unabhängig davon, ob/wann ein Event-Loop existiert.
+  - Tatsächliches Scheduling (`call_later`, `create_datagram_endpoint`, `run_coroutine_threadsafe`-Loop in `set_on_message`): auf `asyncio.get_running_loop()` umgestellt, da diese Stellen ausschließlich innerhalb eines bereits laufenden Loops ausgeführt werden.
+- Betrifft nur den BLE-Modus als sichtbaren Absturz; die entsprechenden Stellen in `wifi_manager.py`/`mqttclient.py` liefen im WiFi-Modus bereits unfallfrei (da dort erst nach Loop-Start aufgerufen), wurden aber aus Konsistenz- und Zukunftssicherheitsgründen im selben Zug mitkorrigiert.
+
 ### v0.4.3 — 2026-07-09
 **Fix: Watchdog-Neustartschleife durch last_updated-Heuristik behoben**
 

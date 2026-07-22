@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import time
 from bleak import BleakScanner, BleakClient, BleakError
 from .constants import Constants
 
@@ -12,7 +13,10 @@ class BLEManager:
         self.queue = asyncio.Queue(5)
         self.callback = callback
         self.event_handler = event_handler  # Use the EventHandlers instance passed from MainManager
-        self.last_message_time = asyncio.get_event_loop().time()
+        # time.monotonic() rather than the event loop's clock: __init__ runs
+        # synchronously before asyncio.run() starts the loop (see Manager.__init__
+        # in main.py), so no running/current loop is guaranteed to exist here.
+        self.last_message_time = time.monotonic()
         self.message_timeout = 35  # 35 seconds timeout for message reception
         self.max_retries = 5  # Maximum number of retries for connection
         
@@ -100,7 +104,7 @@ class BLEManager:
             return False
 
     async def _handle_notification_wrapper(self, sender, data):
-        self.last_message_time = asyncio.get_event_loop().time()
+        self.last_message_time = time.monotonic()
         await self.event_handler.receive_notification(sender, data)
 
     async def disconnect_device(self, address):
@@ -165,10 +169,13 @@ class BLEManager:
         await self.queue.put(message)
 
     def _schedule_reconnect_check(self):
-        asyncio.get_event_loop().call_later(self.message_timeout, self._check_reconnect)
+        # get_running_loop() is safe here: this is only ever called from
+        # connect_device() (a coroutine) or recursively from _check_reconnect()
+        # (a callback fired by the running loop), so a loop is always running.
+        asyncio.get_running_loop().call_later(self.message_timeout, self._check_reconnect)
 
     def _check_reconnect(self):
-        if asyncio.get_event_loop().time() - self.last_message_time > self.message_timeout:
+        if time.monotonic() - self.last_message_time > self.message_timeout:
             self.logger.warning(f"No message received in the last {self.message_timeout} seconds. Requesting manager to restart.")
             asyncio.create_task(self.manager.restart_run())
         else:

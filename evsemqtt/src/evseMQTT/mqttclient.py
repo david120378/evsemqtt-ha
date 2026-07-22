@@ -34,7 +34,7 @@ class MQTTClient:
         # but all asyncio objects (Queue, transports, …) are bound to the *main*
         # event loop.  run_coroutine_threadsafe() schedules the coroutine on the
         # already-running main loop instead — exactly what we need.
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         self.client.on_message = lambda client, userdata, message: asyncio.run_coroutine_threadsafe(
             on_message(client, userdata, message), loop
         )
