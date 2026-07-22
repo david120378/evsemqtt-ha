@@ -1,3 +1,11 @@
+## v0.4.4 — 2026-07-10
+**Fix: BLE-Modus unter Python 3.14 abgestürzt**
+`asyncio.get_event_loop()` erzeugt in Python 3.14 keinen impliziten Event-Loop mehr — `BLEManager.__init__` rief es aber auf, bevor der Loop überhaupt lief, was den BLE-Modus komplett unbenutzbar machte. Alle 10 Vorkommen im Repo behoben: reine Zeitstempel auf `time.monotonic()`, echtes Scheduling auf `asyncio.get_running_loop()`.
+
+## v0.4.3 — 2026-07-09
+**Fix: Watchdog-Neustartschleife durch last_updated-Heuristik behoben**
+Die in v0.3.4 eingeführte `last_updated > 20 min`-Bedingung hat das Addon alle ~10 Minuten grundlos neugestartet, da der Status-Sensor nur bei Wertänderung publiziert wird. Bedingung auf reinen `unavailable`-Check reduziert.
+
 ## v0.4.2 — 2026-06-29
 **Neu: Fahrzeugunabhängiger Leerlauf-Stopp**
 `wallbox_surplus_stop.yaml` (v0.3.0): Neuer optionaler Stopp-Pfad über `output_state == Idle`. Behebt, dass der Lade-Schalter auf `on` hängen blieb wenn das Auto von selbst fertig lud. Neue optionale Inputs: `idle_state_sensor`, `idle_state_value`, `idle_stop_delay`.
