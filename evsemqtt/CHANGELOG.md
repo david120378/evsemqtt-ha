@@ -1,3 +1,7 @@
+## v0.4.5 — 2026-07-10
+**Fix: Überschussladen-Blueprints — Einspeisungs-Trigger feuerten nie**
+`wallbox_surplus_start.yaml` (v0.2.4) und `wallbox_surplus_stop.yaml` (v0.3.1): Template-Trigger referenzierten Variablen aus dem automation-`variables:`-Block, der zur Trigger-Zeit noch nicht existiert (`'feedin_entity' is undefined`). Betroffene Trigger auf `numeric_state` mit eigenem `trigger_variables:`-Block umgestellt; verbleibende Template-Trigger (`car_full`/`car_idle`) beziehen ihre Werte ebenfalls daraus. `has_value`-Guard gegen Fehlauslösung durch unavailable-Sensoren.
+
 ## v0.4.4 — 2026-07-10
 **Fix: BLE-Modus unter Python 3.14 abgestürzt**
 `asyncio.get_event_loop()` erzeugt in Python 3.14 keinen impliziten Event-Loop mehr — `BLEManager.__init__` rief es aber auf, bevor der Loop überhaupt lief, was den BLE-Modus komplett unbenutzbar machte. Alle 10 Vorkommen im Repo behoben: reine Zeitstempel auf `time.monotonic()`, echtes Scheduling auf `asyncio.get_running_loop()`.

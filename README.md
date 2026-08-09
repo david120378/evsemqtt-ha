@@ -248,6 +248,13 @@ Sobald das Addon läuft und die Wallbox erkannt wurde, erscheint unter
 
 ## Changelog
 
+### v0.4.5 — 2026-07-10
+**Fix: Überschussladen-Blueprints — Template-Trigger sahen automation-`variables:` nie (Einspeisungs-Stop komplett tot)**
+
+- `blueprints/automation/david120378/wallbox_surplus_start.yaml` (v0.2.4): Template-Trigger referenzierte `feedin_entity`/`kw_multiplier`/`puffer_w` aus dem automation-level `variables:`-Block, der erst zur Laufzeit (Condition/Action) gerendert wird — Trigger sehen nur `trigger_variables:`. Ergebnis: `'feedin_entity' is undefined`, der Trigger feuerte nie. Auf `numeric_state` mit eigenem `trigger_variables:`-Block umgestellt; Puffer wird im `value_template` abgezogen, damit `above` ein reiner Input bleibt. `has_value`-Guard verhindert, dass ein unavailable/unknown-Sensor als 0 W gewertet wird.
+- `blueprints/automation/david120378/wallbox_surplus_stop.yaml` (v0.3.1): Derselbe Bug betraf alle vier Template-Trigger (`feedin_low`, `soc_low`, `car_full`, `car_idle`). Da die Stopbedingung an `trigger.id == 'feedin_low'` hängt und der `time_pattern`-Fallback ihn bewusst ausklammert, war der Einspeisungs-Stop-Pfad dadurch komplett tot. `feedin_low` und `soc_low` auf `numeric_state` umgestellt (`below` bei `soc_low` zeigt direkt auf die `soc_threshold_helper`-Entity, kein Template nötig). `car_full`/`car_idle` bleiben Template-Trigger, beziehen ihre Werte jetzt aber aus einem `trigger_variables:`-Block. `has_value`-Guard bei `feedin_low` gegen Fehl-Stopp durch unavailable-Sensor.
+- Keine Input-Keys umbenannt oder entfernt — bestehende Automationen aus diesen Blueprints bleiben kompatibel.
+
 ### v0.4.4 — 2026-07-10
 **Fix: BLE-Modus unter Python 3.14 abgestürzt (`RuntimeError: There is no current event loop`)**
 

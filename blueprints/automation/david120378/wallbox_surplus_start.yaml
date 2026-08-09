@@ -1,7 +1,16 @@
 # ============================================================
 # Blueprint: Wallbox – Überschussladen – Starten
-# Version:   0.2.3
+# Version:   0.2.4
 # Changelog:
+#   0.2.4 – Bugfix: Template-Trigger referenzierte feedin_entity/kw_multiplier/
+#            puffer_w aus dem automation-level variables:-Block, der erst zur
+#            Laufzeit (Condition/Action) gerendert wird — Trigger sehen nur
+#            trigger_variables:. Ergebnis: "'feedin_entity' is undefined",
+#            Trigger feuerte nie. Umgestellt auf numeric_state-Trigger mit
+#            eigenem trigger_variables:-Block (kw_multiplier_t, puffer_w_t);
+#            Puffer wird im value_template abgezogen, damit "above" ein
+#            reiner Input bleibt. has_value-Guard verhindert, dass ein
+#            unavailable/unknown-Sensor als 0 W gewertet wird.
 #   0.2.3 – kW-Sensor-Unterstützung: sensor_in_kw Boolean + kw_multiplier
 #            (FOX-ESS liefert kW, Schwellen sind in W → Vergleich schlug immer fehl)
 #   0.2.2 – Versionskorrektur
@@ -197,12 +206,26 @@ variables:
   sensor_kw: !input sensor_in_kw
   kw_multiplier: "{{ 1000 if sensor_kw else 1 }}"
 
+# trigger_variables: werden VOR dem variables:-Block gerendert und sind die
+# einzigen Variablen, die in Trigger-value_templates verfügbar sind.
+trigger_variables:
+  puffer_w_t: !input puffer_watt
+  sensor_kw_t: !input sensor_in_kw
+  kw_multiplier_t: "{{ 1000 if sensor_kw_t else 1 }}"
+
 trigger:
-  # Template-Trigger: konvertiert kW → W über kw_multiplier und wartet start_delay
-  - platform: template
+  # numeric_state statt template: above/for funktionieren nativ, kein
+  # undefined-Fehler mehr. Puffer wird im value_template abgezogen, damit
+  # "above" ein reiner Input (start_threshold_watts) bleiben kann — above/
+  # below akzeptieren keine Templates. has_value-Guard: ein unavailable/
+  # unknown-Sensor rendert "none" statt fälschlich als 0 W gewertet zu werden.
+  - platform: numeric_state
     alias: "Einspeisung über Startschwelle"
+    entity_id: !input feedin_sensor
     value_template: >
-      {{ states(feedin_entity) | float(0) * kw_multiplier >= (start_threshold_w + puffer_w) }}
+      {{ none if not has_value(state.entity_id) else
+         (state.state | float(0) * kw_multiplier_t - puffer_w_t) }}
+    above: !input start_threshold_watts
     for: !input start_delay
 
   # Fallback: Prüft alle 5 Min. ob Überschuss vorhanden ist.

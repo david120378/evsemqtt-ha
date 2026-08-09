@@ -1,7 +1,24 @@
 # ============================================================
 # Blueprint: Wallbox – Überschussladen – Stoppen
-# Version:   0.3.0
+# Version:   0.3.1
 # Changelog:
+#   0.3.1 – Bugfix: Alle vier Template-Trigger (feedin_low, soc_low, car_full,
+#            car_idle) referenzierten Variablen aus dem automation-level
+#            variables:-Block, der erst zur Laufzeit (Condition/Action)
+#            gerendert wird — Trigger sehen nur trigger_variables:. Ergebnis:
+#            "'feedin_entity' is undefined", kein Template-Trigger feuerte
+#            jemals. Da die Stopbedingung an trigger.id == 'feedin_low' hängt
+#            und der time_pattern-Fallback ihn bewusst ausklammert (siehe
+#            0.2.4), war der komplette Einspeisungs-Stop-Pfad tot.
+#            feedin_low und soc_low auf numeric_state umgestellt (native
+#            above/below/for, kein Template nötig für soc_low — below zeigt
+#            direkt auf soc_threshold_helper). car_full/car_idle bleiben
+#            Template-Trigger (Entity-ID aus optionalem Input, kann leer
+#            sein), beziehen ihre Werte jetzt aber aus einem eigenen
+#            trigger_variables:-Block. has_value-Guard bei feedin_low
+#            verhindert, dass ein unavailable/unknown-Sensor als 0 W
+#            gewertet wird (hätte sonst einen sofortigen Fehl-Stopp
+#            ausgelöst).
 #   0.3.0 – Neuer Stopp-Pfad "Wallbox im Leerlauf" (FAHRZEUGUNABHÄNGIG):
 #            Stoppt das Laden wenn der Lade-Schalter an ist, der wallbox-eigene
 #            Status-Sensor (z.B. evsemqtt 'output_state') aber 'Leerlauf' meldet
@@ -209,27 +226,46 @@ variables:
   idle_state_entity: !input idle_state_sensor
   idle_state_val: !input idle_state_value
 
+# trigger_variables: werden VOR dem variables:-Block gerendert und sind die
+# einzigen Variablen, die in Trigger-value_templates verfügbar sind.
+trigger_variables:
+  sensor_kw_t: !input sensor_in_kw
+  kw_multiplier_t: "{{ 1000 if sensor_kw_t else 1 }}"
+  car_soc_entity_t: !input car_soc_sensor
+  car_soc_max_t: !input car_soc_max
+  idle_state_entity_t: !input idle_state_sensor
+  idle_state_val_t: !input idle_state_value
+
 trigger:
-  # Template-Trigger: konvertiert kW → W über kw_multiplier und wartet stop_delay
-  - platform: template
+  # numeric_state statt template: below/for funktionieren nativ, kein
+  # undefined-Fehler mehr. has_value-Guard: ein unavailable/unknown-Sensor
+  # rendert "none" statt fälschlich als 0 W gewertet zu werden (hätte sonst
+  # sofort "unter Stoppschwelle" ausgelöst).
+  - platform: numeric_state
     alias: "Einspeisung unter Stoppschwelle"
+    entity_id: !input feedin_sensor
     value_template: >
-      {{ states(feedin_entity) | float(0) * kw_multiplier < stop_threshold_w }}
+      {{ none if not has_value(state.entity_id) else
+         (state.state | float(0) * kw_multiplier_t) }}
+    below: !input stop_threshold_watts
     for: !input stop_delay
     id: feedin_low
 
-  - platform: template
+  # below zeigt direkt auf die input_number-Entity — kein Template nötig,
+  # numeric_state löst den Vergleichswert selbst zur Trigger-Zeit auf und
+  # wertet einen unavailable SOC-Sensor korrekt als "kein Match" statt als 0.
+  - platform: numeric_state
     alias: "PV-Batterie SOC unter Schwellwert"
-    value_template: >
-      {{ states(soc_entity) | float(0) < states(soc_threshold_entity) | float(0) }}
+    entity_id: !input soc_sensor
+    below: !input soc_threshold_helper
     for: !input soc_stop_delay
     id: soc_low
 
   - platform: template
     alias: "Auto SOC Ziel erreicht"
     value_template: >
-      {{ car_soc_entity != '' and
-         states(car_soc_entity) | float(100) >= car_soc_max_v }}
+      {{ car_soc_entity_t != '' and
+         states(car_soc_entity_t) | float(100) >= car_soc_max_t }}
     for: "00:01:00"
     id: car_full
 
@@ -237,7 +273,7 @@ trigger:
   - platform: template
     alias: "Wallbox im Leerlauf (kein Ladestrom)"
     value_template: >
-      {{ idle_state_entity != '' and is_state(idle_state_entity, idle_state_val) }}
+      {{ idle_state_entity_t != '' and is_state(idle_state_entity_t, idle_state_val_t) }}
     for: !input idle_stop_delay
     id: car_idle
 
