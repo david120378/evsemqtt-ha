@@ -1,3 +1,7 @@
+## v0.4.6 — 2026-09-28
+**Fix: WiFi-Reconnect blieb nach dem ersten Wakeup hängen (Wallbox nur per App/Neustart wieder erreichbar)**
+Der Wakeup-Broadcast an 255.255.255.255:28376 kam über das Loopback beim eigenen UDP-Socket (0.0.0.0:28376) wieder an. Das Addon hielt das eigene Paket für eine Antwort der Wallbox, setzte sich auf `connected` (Gegenstelle = eigene IP) und stellte die Wakeup-Wiederholungen ein. Eingehende Datagramme werden jetzt verworfen, wenn sie dem eigenen Wakeup-Paket entsprechen, von einer eigenen IP stammen oder – bei gesetzter `WIFI_IP` – nicht von der Wallbox kommen. „Wallbox discovered“ wird jetzt als WARNING geloggt, damit Reconnects im Standard-Log sichtbar sind.
+
 ## v0.4.5 — 2026-07-10
 **Fix: Überschussladen-Blueprints — Einspeisungs-Trigger feuerten nie**
 `wallbox_surplus_start.yaml` (v0.2.4) und `wallbox_surplus_stop.yaml` (v0.3.1): Template-Trigger referenzierten Variablen aus dem automation-`variables:`-Block, der zur Trigger-Zeit noch nicht existiert (`'feedin_entity' is undefined`). Betroffene Trigger auf `numeric_state` mit eigenem `trigger_variables:`-Block umgestellt; verbleibende Template-Trigger (`car_full`/`car_idle`) beziehen ihre Werte ebenfalls daraus. `has_value`-Guard gegen Fehlauslösung durch unavailable-Sensoren.

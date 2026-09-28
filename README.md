@@ -248,6 +248,12 @@ Sobald das Addon läuft und die Wallbox erkannt wurde, erscheint unter
 
 ## Changelog
 
+### v0.4.6 — 2026-09-28
+**Fix: WiFi-Reconnect blieb nach dem ersten Wakeup hängen (Wallbox nur per App oder Addon-Neustart wieder erreichbar)**
+
+- `evseMQTT/wifi_manager.py`: Der Wakeup-Broadcast an `255.255.255.255:28376` wurde vom eigenen, auf `0.0.0.0:28376` gebundenen UDP-Socket wieder empfangen. Das Addon hielt dieses Echo für eine Antwort der Wallbox, setzte `connected = True` mit der eigenen IP als Gegenstelle und stellte die Wakeup-Wiederholungen (alle 10 s) ein — im Log erschien nie „Still no UDP datagram … retrying wakeup“. Neue Prüfung `_is_foreign_datagram()` verwirft das eigene Wakeup-Paket, Pakete von eigenen IPs und – bei gesetzter `WIFI_IP` – alles, was nicht von der Wallbox kommt.
+- „Wallbox discovered at …“ wird als WARNING geloggt, damit Reconnects auch mit `LOGGING_LEVEL: WARNING` sichtbar sind.
+
 ### v0.4.5 — 2026-07-10
 **Fix: Überschussladen-Blueprints — Template-Trigger sahen automation-`variables:` nie (Einspeisungs-Stop komplett tot)**
 

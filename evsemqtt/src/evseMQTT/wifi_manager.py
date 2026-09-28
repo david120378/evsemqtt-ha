@@ -83,6 +83,7 @@ class WiFiManager:
         self.event_handler = event_handler
         self.logger = logger
         self.wifi_ip = wifi_ip             # optional static IP from add-on config
+        self._local_ips = self._get_local_ips()  # own addresses - never the wallbox
 
         self.transport = None              # asyncio.DatagramTransport, set by _UDPProtocol
         self.evse_addr = None             # (ip, port) of wallbox, discovered on first packet
@@ -236,7 +237,49 @@ class WiFiManager:
     # Incoming datagrams
     # ------------------------------------------------------------------
 
+    def _is_foreign_datagram(self, data, addr):
+        """Return True for datagrams that must not be treated as wallbox traffic.
+
+        The socket is bound to 0.0.0.0:<port> and our own wakeup broadcast goes to
+        255.255.255.255:<port>, so the kernel loops it back to us.  Without this
+        filter the add-on took its own wakeup for a wallbox reply, marked itself as
+        connected (evse_addr = own IP), stopped the wakeup retries and kept talking
+        to itself until the process was restarted or the phone app woke the wallbox.
+        """
+        if bytes(data) == _WAKEUP_PACKET:
+            return True
+        if self.wifi_ip and addr[0] != self.wifi_ip:
+            return True
+        if addr[0] in self._local_ips:
+            return True
+        return False
+
+    @staticmethod
+    def _get_local_ips():
+        """Best-effort set of this host's own IPv4 addresses (host network)."""
+        ips = {"127.0.0.1"}
+        try:
+            ips.update(socket.gethostbyname_ex(socket.gethostname())[2])
+        except Exception:
+            pass
+        try:
+            # Route lookup only - no packet is sent for a UDP connect().
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect(("192.0.2.1", 9))
+            ips.add(s.getsockname()[0])
+            s.close()
+        except Exception:
+            pass
+        return ips
+
     async def _on_datagram(self, data, addr):
+        if self._is_foreign_datagram(data, addr):
+            self.logger.debug(
+                f"Ignoring UDP datagram from {addr[0]}:{addr[1]} "
+                "(own wakeup echo or not the wallbox)"
+            )
+            return
+
         self.last_message_time = time.monotonic()
 
         if not self.connected:
@@ -248,7 +291,7 @@ class WiFiManager:
             if addr[0] != self.last_known_ip:
                 self.last_known_ip = addr[0]
                 self._save_cached_ip(addr[0])
-            self.logger.info(f"Wallbox discovered at {addr[0]}:{addr[1]}")
+            self.logger.warning(f"Wallbox discovered at {addr[0]}:{addr[1]}")
             # Reset the watchdog to a full message_timeout from now.
             self._schedule_reconnect_check()
 
